@@ -1,0 +1,61 @@
+[package]
+name = "nova-compiler"
+version = "1.0.0"
+edition = "2021"
+description = "NOVA Compiler Frontend"
+authors = ["NOVA Core Team <core@nova-lang.org>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/samprit-web/NOVA"
+
+[dependencies]
+# Workspace
+anyhow = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+crossbeam = { workspace = true }
+once_cell = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+
+# Parsing
+nom = { workspace = true }
+pest = { workspace = true, features = ["serde"] }
+pest_derive = { workspace = true }
+lalrpop = { workspace = true }
+lalrpop-util = { workspace = true }
+
+# Compiler internals
+indexmap = "2.0"
+smallvec = "1.10"
+bitflags = "2.4"
+slotmap = "1.0"
+generational-arena = "0.3"
+frozen = "0.3"
+stencil = "0.5"
+
+# Utilities
+regex = "1.10"
+glob = { workspace = true }
+walkdir = { workspace = true }
+ignore = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+pretty_assertions = { workspace = true }
+instanta = { workspace = true }
+trybuild = { workspace = true }
+
+[build-dependencies]
+lalrpop = { workspace = true }
+
+[features]
+default = ["parser"]
+parser = []
+codegen = ["inkwell", "cranelift"]
+vm = ["wasmtime"]
+lsp = ["tower-lsp", "lsp-types"]
+full = ["parser", "codegen", "vm", "lsp"]

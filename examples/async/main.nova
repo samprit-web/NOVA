@@ -1,0 +1,366 @@
+// Async Example - Concurrent Web Scraper
+// Demonstrates async/await and structured concurrency in NOVA
+
+use nova_http::{Client, Request, Response}
+use nova_task::{spawn, join, try_join, select, race, timeout, sleep}
+use nova_time::{Instant, Duration}
+use nova_collections::{Vec, HashMap, HashSet}
+use nova_string::{String, ToString}
+use nova_sync::{Arc, RwLock, Mutex}
+use nova_io::{stdout, Write}
+use nova_fmt::format
+
+// Configuration
+const CONCURRENT_LIMIT: usize = 10
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30)
+const RETRY_COUNT: u32 = 3
+const RETRY_DELAY: Duration = Duration::from_millis(500)
+
+struct Scraper {
+    client: Client,
+    semaphore: Arc<Semaphore>,
+    results: Arc<RwLock<HashMap<String, ScrapeResult>>>,
+    stats: Arc<Mutex<ScraperStats>>,
+}
+
+#[derive(Debug, Clone)]
+struct ScrapeResult {
+    url: String,
+    status: u16,
+    content_length: usize,
+    duration: Duration,
+    error: Option<String>,
+}
+
+#[derive(Default)]
+struct ScraperStats {
+    total: usize,
+    succeeded: usize,
+    failed: usize,
+    total_bytes: usize,
+    total_time: Duration,
+}
+
+// Semaphore for limiting concurrency
+struct Semaphore {
+    permits: Mutex<usize>,
+    waiters: Mutex<Vec<tokio::sync::oneshot::Sender<()>>>,
+}
+
+impl Semaphore {
+    fn new(permits: usize) -> Self {
+        Self {
+            permits: Mutex::new(permits),
+            waiters: Mutex::new(Vec::new()),
+        }
+    }
+
+    async fn acquire(&self) -> SemaphoreGuard {
+        let mut permits = self.permits.lock().await;
+        if *permits > 0 {
+            *permits -= 1;
+            return SemaphoreGuard { semaphore: self };
+        }
+        
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.waiters.lock().await.push(tx);
+        rx.await.unwrap();
+        SemaphoreGuard { semaphore: self }
+    }
+
+    fn release(&self) {
+        let mut permits = self.permits.lock().await;
+        let mut waiters = self.waiters.lock().await;
+        if let Some(tx) = waiters.pop() {
+            let _ = tx.send(());
+        } else {
+            *permits += 1;
+        }
+    }
+}
+
+struct SemaphoreGuard<'a> {
+    semaphore: &'a Semaphore,
+}
+
+impl<'a> Drop for SemaphoreGuard<'a> {
+    fn drop(&mut self) {
+        self.semaphore.release();
+    }
+}
+
+impl Scraper {
+    fn new() -> Self {
+        Self {
+            client: Client::new(),
+            semaphore: Arc::new(Semaphore::new(CONCURRENT_LIMIT)),
+            results: Arc::new(RwLock::new(HashMap::new())),
+            stats: Arc::new(Mutex::new(ScraperStats::default())),
+        }
+    }
+
+    async fn scrape(&self, urls: Vec<String>) -> Result<Vec<ScrapeResult>, Box<dyn std::error::Error>> {
+        println!("🚀 Starting scrape of {} URLs with concurrency limit {}", urls.len(), CONCURRENT_LIMIT);
+        
+        let start = Instant::now();
+        
+        // Spawn tasks for each URL
+        let tasks: Vec<_> = urls.into_iter().map(|url| {
+            let scraper = self.clone();
+            spawn(async move {
+                scraper.scrape_url(url).await
+            })
+        }).collect();
+
+        // Wait for all tasks
+        let results = try_join_all(tasks).await?;
+        
+        // Update stats
+        let mut stats = self.stats.lock().await;
+        stats.total_time = start.elapsed();
+        
+        println!("\n✅ Scraping completed in {:.2}s", stats.total_time.as_secs_f32());
+        self.print_stats();
+        
+        Ok(results)
+    }
+
+    async fn scrape_url(&self, url: String) -> Result<ScrapeResult, Box<dyn std::error::Error>> {
+        let _permit = self.semaphore.acquire().await;
+        
+        let start = Instant::now();
+        let mut last_error = None;
+        
+        for attempt in 1..=RETRY_COUNT {
+            match self.fetch_with_timeout(&url).await {
+                Ok(response) => {
+                    let duration = start.elapsed();
+                    let content_length = response.body.len();
+                    
+                    let result = ScrapeResult {
+                        url: url.clone(),
+                        status: response.status,
+                        content_length,
+                        duration,
+                        error: None,
+                    };
+                    
+                    self.record_result(result.clone());
+                    return Ok(result);
+                }
+                Err(e) => {
+                    last_error = Some(e.to_string());
+                    if attempt < RETRY_COUNT {
+                        sleep(RETRY_DELAY).await;
+                    }
+                }
+            }
+        }
+        
+        let duration = start.elapsed();
+        let result = ScrapeResult {
+            url: url.clone(),
+            status: 0,
+            content_length: 0,
+            duration,
+            error: last_error,
+        };
+        
+        self.record_result(result.clone());
+        Ok(result)
+    }
+
+    async fn fetch_with_timeout(&self, url: &str) -> Result<Response, Box<dyn std::error::Error>> {
+        timeout(REQUEST_TIMEOUT, async {
+            let request = Request::get(url).build()?;
+            self.client.execute(request).await
+        }).await?
+    }
+
+    fn record_result(&self, result: ScrapeResult) {
+        let url = result.url.clone();
+        self.results.write().await.insert(url, result);
+        
+        let mut stats = self.stats.lock().await;
+        stats.total += 1;
+        if result.error.is_none() {
+            stats.succeeded += 1;
+            stats.total_bytes += result.content_length;
+        } else {
+            stats.failed += 1;
+        }
+    }
+
+    fn print_stats(&self) {
+        let stats = self.stats.lock().await;
+        println!("  Total:     {}", stats.total);
+        println!("  Succeeded: {}", stats.succeeded);
+        println!("  Failed:    {}", stats.failed);
+        println!("  Bytes:     {}", format_bytes(stats.total_bytes));
+        println!("  Time:      {:.2}s", stats.total_time.as_secs_f32());
+    }
+}
+
+// Concurrent pipeline processing
+async fn process_pipeline<T, U, V>(
+    inputs: Vec<T>,
+    stage1: impl Fn(T) -> Result<U, E> + Send + Sync + 'static,
+    stage2: impl Fn(U) -> Result<V, E> + Send + Sync + 'static,
+    concurrency: usize,
+) -> Result<Vec<V>, E>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+    V: Send + 'static,
+    E: Send + Sync + 'static,
+{
+    let semaphore = Arc::new(Semaphore::new(concurrency));
+    let results = Arc::new(Mutex::new(Vec::new()));
+    
+    let tasks: Vec<_> = inputs.into_iter().map(|input| {
+        let semaphore = semaphore.clone();
+        let results = results.clone();
+        let stage1 = &stage1;
+        let stage2 = &stage2;
+        
+        spawn(async move {
+            let _permit = semaphore.acquire().await;
+            let intermediate = stage1(input)?;
+            let output = stage2(intermediate)?;
+            results.lock().await.push(output);
+            Ok::<_, E>(())
+        })
+    }).collect();
+    
+    try_join_all(tasks).await?;
+    
+    let mut results = results.lock().await;
+    Ok(results.drain(..).collect())
+}
+
+// Rate limiter
+struct RateLimiter {
+    max_per_second: usize,
+    tokens: Mutex<f64>,
+    last_update: Mutex<Instant>,
+}
+
+impl RateLimiter {
+    fn new(max_per_second: usize) -> Self {
+        Self {
+            max_per_second,
+            tokens: Mutex::new(max_per_second as f64),
+            last_update: Mutex::new(Instant::now()),
+        }
+    }
+
+    async fn acquire(&self) {
+        loop {
+            let mut tokens = self.tokens.lock().await;
+            let mut last = self.last_update.lock().await;
+            
+            let now = Instant::now();
+            let elapsed = now.duration_since(*last).as_secs_f64();
+            *tokens = (*tokens + elapsed * self.max_per_second as f64).min(self.max_per_second as f64);
+            *last = now;
+            
+            if *tokens >= 1.0 {
+                *tokens -= 1.0;
+                return;
+            }
+            
+            drop(tokens);
+            drop(last);
+            sleep(Duration::from_millis(10)).await;
+        }
+    }
+}
+
+// Async iterator extensions
+trait AsyncIteratorExt: Sized {
+    async fn collect_vec(self) -> Vec<Self::Item>;
+    async fn filter_map<F, U>(self, f: F) -> Vec<U> where F: Fn(Self::Item) -> Option<U>;
+    async fn map<F, U>(self, f: F) -> Vec<U> where F: Fn(Self::Item) -> U;
+}
+
+impl<I: futures::Stream + Unpin> AsyncIteratorExt for I {
+    async fn collect_vec(mut self) -> Vec<Self::Item> {
+        let mut vec = Vec::new();
+        while let Some(item) = self.next().await {
+            vec.push(item);
+        }
+        vec
+    }
+    
+    async fn filter_map<F, U>(mut self, f: F) -> Vec<U>
+    where F: Fn(Self::Item) -> Option<U>
+    {
+        let mut vec = Vec::new();
+        while let Some(item) = self.next().await {
+            if let Some(u) = f(item) { vec.push(u); }
+        }
+        vec
+    }
+    
+    async fn map<F, U>(mut self, f: F) -> Vec<U>
+    where F: Fn(Self::Item) -> U
+    {
+        let mut vec = Vec::new();
+        while let Some(item) = self.next().await {
+            vec.push(f(item));
+        }
+        vec
+    }
+}
+
+// Helper for joining all tasks
+async fn try_join_all<T, E>(tasks: Vec<impl Future<Output = Result<T, E>>>) -> Result<Vec<T>, E> {
+    let mut results = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        results.push(task.await?);
+    }
+    Ok(results)
+}
+
+fn format_bytes(bytes: usize) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{:.1} {}", size, UNITS[unit])
+}
+
+// Main
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    nova_task::block_on(async {
+        let urls = vec![
+            "https://httpbin.org/delay/1".to_string(),
+            "https://httpbin.org/delay/2".to_string(),
+            "https://httpbin.org/status/200".to_string(),
+            "https://httpbin.org/status/404".to_string(),
+            "https://httpbin.org/html".to_string(),
+            "https://httpbin.org/json".to_string(),
+            "https://httpbin.org/xml".to_string(),
+            "https://httpbin.org/robots.txt".to_string(),
+        ];
+
+        let scraper = Scraper::new();
+        let results = scraper.scrape(urls).await?;
+
+        // Print detailed results
+        println!("\n📋 Detailed Results:");
+        for result in results {
+            if let Some(error) = &result.error {
+                println!("  ❌ {} - Error: {}", result.url, error);
+            } else {
+                println!("  ✅ {} - {} ({} bytes, {:.2}s)", 
+                    result.url, result.status, result.content_length, result.duration.as_secs_f32());
+            }
+        }
+
+        Ok(())
+    })
+}

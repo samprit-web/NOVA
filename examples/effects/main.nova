@@ -1,0 +1,296 @@
+// Algebraic Effects Example - Effect Handlers
+// Demonstrates NOVA's algebraic effects system
+
+// Enable effects feature
+#![feature(algebraic_effects)]
+
+use nova_std::prelude::*;
+
+// Define effects
+effect IO {
+    fn read_file(path: String) -> Result<String, IOError>;
+    fn write_file(path: String, content: String) -> Result<(), IOError>;
+    fn print(text: String) -> ();
+    fn input(prompt: String) -> String;
+}
+
+effect State<S> {
+    fn get() -> S;
+    fn set(value: S) -> ();
+}
+
+effect Random {
+    fn next_u32() -> u32;
+    fn next_f64() -> f64;
+    fn next_bool() -> bool;
+}
+
+effect Exception<E> {
+    fn throw(error: E) -> !;
+}
+
+effect Async {
+    fn spawn<F: FnOnce() -> T + Send>(f: F) -> JoinHandle<T>;
+    fn sleep(duration: Duration) -> ();
+    fn yield_now() -> ();
+}
+
+effect Logger {
+    fn log(level: LogLevel, message: String) -> ();
+}
+
+// Effect handlers
+fn run_with_io<F: FnOnce() -> T, T>(f: F) -> Result<T, IOError> {
+    handle f() with {
+        IO::read_file(path) => resume std::fs::read_to_string(path).map_err(IOError::from),
+        IO::write_file(path, content) => resume std::fs::write(path, content).map_err(IOError::from),
+        IO::print(text) => { println!("{}", text); resume () },
+        IO::input(prompt) => {
+            print!("{}", prompt);
+            std::io::stdout().flush().unwrap();
+            let mut buf = String::new();
+            std::io::stdin().read_line(&mut buf).unwrap();
+            resume buf.trim().to_string()
+        }
+    }
+}
+
+fn run_with_state<S, F: FnOnce() -> T, T>(initial: S, f: F) -> (T, S) {
+    let mut state = initial;
+    let result = handle f() with {
+        State::get() => resume state.clone(),
+        State::set(value) => { state = value; resume () },
+    };
+    (result, state)
+}
+
+fn run_with_random<F: FnOnce() -> T, T>(f: F) -> T {
+    handle f() with {
+        Random::next_u32() => resume rand::random(),
+        Random::next_f64() => resume rand::random(),
+        Random::next_bool() => resume rand::random(),
+    }
+}
+
+fn run_with_exception<E, F: FnOnce() -> Result<T, E>, T>(f: F) -> Result<T, E> {
+    handle f() with {
+        Exception::throw(error) => Err(error),
+    }
+}
+
+fn run_with_logger<F: FnOnce() -> T, T>(f: F) -> T {
+    handle f() with {
+        Logger::log(level, message) => {
+            let prefix = match level {
+                LogLevel::Debug => "[DEBUG]",
+                LogLevel::Info => "[INFO]",
+                LogLevel::Warn => "[WARN]",
+                LogLevel::Error => "[ERROR]",
+            };
+            println!("{} {}", prefix, message);
+            resume ()
+        }
+    }
+}
+
+fn run_with_async<F: FnOnce() -> T, T>(f: F) -> T {
+    // Simplified async runtime
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        handle f() with {
+            Async::spawn(f) => resume tokio::spawn(f),
+            Async::sleep(duration) => { tokio::time::sleep(duration).await; resume () },
+            Async::yield_now() => { tokio::task::yield_now().await; resume () },
+        }
+    })
+}
+
+// Example: File processing with effects
+fn process_files(paths: Vec<String>) -> Result<Vec<String>, IOError> {
+    run_with_io(|| {
+        let mut results = Vec::new();
+        for path in paths {
+            let content = perform IO::read_file(path.clone())?;
+            let processed = content.to_uppercase();
+            perform IO::write_file(format!("{}.upper", path), processed.clone())?;
+            results.push(processed);
+        }
+        results
+    })
+}
+
+// Example: Counter with state
+fn counter_demo() -> (i32, i32) {
+    run_with_state(0, || {
+        perform State::set(perform State::get() + 1);
+        perform State::set(perform State::get() + 1);
+        perform State::set(perform State::get() + 1);
+        perform State::get()
+    })
+}
+
+// Example: Random number generation
+fn random_demo() -> (u32, f64, bool) {
+    run_with_random(|| {
+        let a = perform Random::next_u32();
+        let b = perform Random::next_f64();
+        let c = perform Random::next_bool();
+        (a, b, c)
+    })
+}
+
+// Example: Exception handling
+fn exception_demo() -> Result<i32, String> {
+    run_with_exception(|| {
+        if perform Random::next_bool() {
+            Ok(42)
+        } else {
+            perform Exception::throw("Random failure!".to_string())
+        }
+    })
+}
+
+// Example: Logging
+fn logging_demo() {
+    run_with_logger(|| {
+        perform Logger::log(LogLevel::Info, "Starting application".to_string());
+        perform Logger::log(LogLevel::Debug, "Debug information".to_string());
+        perform Logger::log(LogLevel::Warn, "Warning: something unusual".to_string());
+        perform Logger::log(LogLevel::Error, "Error occurred!".to_string());
+        "Done"
+    });
+}
+
+// Composable effects
+fn composed_effects() -> Result<String, IOError> {
+    run_with_io(|| {
+        run_with_state(0, || {
+            run_with_logger(|| {
+                perform Logger::log(LogLevel::Info, "Reading config".to_string());
+                let config = perform IO::read_file("config.txt".to_string())?;
+                
+                let mut count = perform State::get();
+                count += 1;
+                perform State::set(count);
+                
+                perform Logger::log(LogLevel::Info, format!("Config loaded, count: {}", count));
+                Ok(config)
+            })
+        })
+    })
+}
+
+// Custom effect for database
+effect Database {
+    fn query(sql: String) -> Result<Vec<Row>, DBError>;
+    fn execute(sql: String) -> Result<u64, DBError>;
+    fn transaction<F: FnOnce() -> Result<T, DBError>, T>(f: F) -> Result<T, DBError>;
+}
+
+struct Row { data: HashMap<String, Value> }
+struct Value { inner: String }
+struct DBError { message: String }
+
+fn run_with_database<F: FnOnce() -> T, T>(f: F) -> T {
+    handle f() with {
+        Database::query(sql) => {
+            // Simulate DB query
+            println!("QUERY: {}", sql);
+            resume Vec::new()
+        }
+        Database::execute(sql) => {
+            println!("EXECUTE: {}", sql);
+            resume 0
+        }
+        Database::transaction(f) => {
+            println!("BEGIN TRANSACTION");
+            let result = f();
+            match result {
+                Ok(v) => { println!("COMMIT"); resume v }
+                Err(e) => { println!("ROLLBACK"); Err(e) }
+            }
+        }
+    }
+}
+
+// Async effect example
+async fn async_demo() {
+    run_with_async(|| async {
+        perform Logger::log(LogLevel::Info, "Starting async tasks".to_string());
+        
+        let handle1 = perform Async::spawn(async {
+            perform Async::sleep(Duration::from_secs(1));
+            "Task 1 done"
+        });
+        
+        let handle2 = perform Async::spawn(async {
+            perform Async::sleep(Duration::from_millis(500));
+            "Task 2 done"
+        });
+        
+        let result1 = handle1.await.unwrap();
+        let result2 = handle2.await.unwrap();
+        
+        perform Logger::log(LogLevel::Info, format!("Results: {}, {}", result1, result2));
+    });
+}
+
+// Main
+fn main() {
+    println!("🎭 NOVA Algebraic Effects Examples");
+    println!("==================================\n");
+
+    // IO Effect
+    println!("📁 IO Effect:");
+    match process_files(vec!["test1.txt".to_string(), "test2.txt".to_string()]) {
+        Ok(results) => println!("  Processed {} files", results.len()),
+        Err(e) => println!("  Error (expected): {}", e),
+    }
+
+    // State Effect
+    println!("\n🔢 State Effect:");
+    let (result, final_state) = counter_demo();
+    println!("  Result: {}, Final state: {}", result, final_state);
+
+    // Random Effect
+    println!("\n🎲 Random Effect:");
+    let (u, f, b) = random_demo();
+    println!("  u32: {}, f64: {}, bool: {}", u, f, b);
+
+    // Exception Effect
+    println!("\n⚠️  Exception Effect:");
+    match exception_demo() {
+        Ok(v) => println!("  Success: {}", v),
+        Err(e) => println!("  Caught: {}", e),
+    }
+
+    // Logger Effect
+    println!("\n📝 Logger Effect:");
+    logging_demo();
+
+    // Composed Effects
+    println!("\n🔗 Composed Effects:");
+    match composed_effects() {
+        Ok(config) => println!("  Config: {}", config),
+        Err(e) => println!("  Error (expected): {}", e),
+    }
+
+    // Database Effect
+    println!("\n🗄️  Database Effect:");
+    run_with_database(|| {
+        let users = perform Database::query("SELECT * FROM users".to_string());
+        println!("  Found {} users", users.len());
+        
+        perform Database::transaction(|| {
+            perform Database::execute("INSERT INTO users (name) VALUES ('Alice')".to_string())?;
+            perform Database::execute("INSERT INTO users (name) VALUES ('Bob')".to_string())?;
+            Ok(())
+        })
+    });
+
+    // Async Effect
+    println!("\n⏱️  Async Effect:");
+    async_demo();
+
+    println!("\n✨ All effects examples completed!");
+}

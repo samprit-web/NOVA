@@ -1,0 +1,44 @@
+# Build artifacts
+target/
+build/
+*.nvbc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+*.profraw
+*.profdata
+
+# Temp files
+tmp/
+temp/
+*.tmp
+
+# Cargo
+Cargo.lock
+**/Cargo.lock
+
+# Nova
+nova.toml.local
+*.nova.bak
+
+# Test outputs
+test-results/
+*.test
+
+# Benchmarks
+bench-results/

@@ -1,0 +1,69 @@
+// Hello World Example
+// This demonstrates basic NOVA syntax
+
+fn main() {
+    println!("Hello, NOVA! 🚀")
+    
+    // Variables
+    let name = "World"
+    let version = 1.0
+    const PI: f64 = 3.14159
+    
+    println!("Welcome to NOVA v{}!", version)
+    println!("PI = {}", PI)
+    
+    // Functions
+    let result = add(10, 20)
+    println!("10 + 20 = {}", result)
+    
+    // Control flow
+    let numbers = [1, 2, 3, 4, 5]
+    for n in numbers {
+        if n % 2 == 0 {
+            println!("{} is even", n)
+        } else {
+            println!("{} is odd", n)
+        }
+    }
+    
+    // Pattern matching
+    let value = Some(42)
+    match value {
+        Some(x) => println!("Got value: {}", x),
+        None => println!("No value"),
+    }
+    
+    // Structs
+    let point = Point { x: 3.0, y: 4.0 }
+    println!("Point magnitude: {}", point.magnitude())
+    
+    // Error handling
+    let result = divide(10, 2)
+    match result {
+        Ok(x) => println!("10 / 2 = {}", x),
+        Err(e) => println!("Error: {}", e),
+    }
+}
+
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+fn divide(a: f64, b: f64) -> Result<f64, String> {
+    if b == 0.0 {
+        Err("Division by zero".to_string())
+    } else {
+        Ok(a / b)
+    }
+}
+
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Point {
+    fn magnitude(&self) -> f64 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+}

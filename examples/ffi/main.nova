@@ -1,0 +1,283 @@
+// FFI Example - Calling C Libraries
+// Demonstrates NOVA's Foreign Function Interface
+
+use nova_ffi::{c_void, c_char, c_int, c_float, c_double, size_t}
+use nova_mem::{alloc, dealloc, Layout}
+use nova_slice::{from_raw_parts, from_raw_parts_mut}
+use nova_string::{CString, CStr}
+use nova_result::Result
+use nova_option::Option
+
+// Import C functions from libm
+#[link(name = "m")]
+extern "C" {
+    fn sin(x: c_double) -> c_double;
+    fn cos(x: c_double) -> c_double;
+    fn sqrt(x: c_double) -> c_double;
+    fn pow(x: c_double, y: c_double) -> c_double;
+    fn log(x: c_double) -> c_double;
+    fn exp(x: c_double) -> c_double;
+}
+
+// Import custom C library (example)
+#[link(name = "mylib")]
+extern "C" {
+    fn mylib_init() -> c_int;
+    fn mylib_cleanup();
+    fn mylib_compute(input: *const c_double, len: size_t, output: *mut c_double) -> c_int;
+    fn mylib_get_version() -> *const c_char;
+}
+
+// Safe wrapper for libm
+pub mod libm {
+    use super::*;
+
+    pub fn sin(x: f64) -> f64 {
+        unsafe { sin(x) }
+    }
+
+    pub fn cos(x: f64) -> f64 {
+        unsafe { cos(x) }
+    }
+
+    pub fn sqrt(x: f64) -> f64 {
+        unsafe { sqrt(x) }
+    }
+
+    pub fn pow(x: f64, y: f64) -> f64 {
+        unsafe { pow(x, y) }
+    }
+
+    pub fn log(x: f64) -> f64 {
+        unsafe { log(x) }
+    }
+
+    pub fn exp(x: f64) -> f64 {
+        unsafe { exp(x) }
+    }
+}
+
+// Safe wrapper for custom library
+pub mod mylib {
+    use super::*;
+
+    pub fn init() -> Result<()> {
+        let result = unsafe { mylib_init() };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err("Failed to initialize mylib".into())
+        }
+    }
+
+    pub fn cleanup() {
+        unsafe { mylib_cleanup() };
+    }
+
+    pub fn compute(input: &[f64]) -> Result<Vec<f64>> {
+        let mut output = vec![0.0; input.len()];
+        let result = unsafe {
+            mylib_compute(input.as_ptr(), input.len(), output.as_mut_ptr())
+        };
+        if result == 0 {
+            Ok(output)
+        } else {
+            Err("mylib_compute failed".into())
+        }
+    }
+
+    pub fn version() -> String {
+        let ptr = unsafe { mylib_get_version() };
+        if ptr.is_null() {
+            "unknown".to_string()
+        } else {
+            unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+        }
+    }
+}
+
+// Callback example
+type CallbackFn = extern "C" fn(c_int, *mut c_void);
+
+extern "C" {
+    fn register_callback(cb: CallbackFn, user_data: *mut c_void) -> c_int;
+    fn trigger_callbacks();
+}
+
+extern "C" fn my_callback(value: c_int, user_data: *mut c_void) {
+    let data = unsafe { &mut *(user_data as *mut CallbackData) };
+    data.values.push(value);
+    println!("Callback called with value: {}", value);
+}
+
+struct CallbackData {
+    values: Vec<c_int>,
+}
+
+// Memory management example
+struct CBuffer {
+    ptr: *mut u8,
+    len: usize,
+    capacity: usize,
+}
+
+impl CBuffer {
+    fn new(capacity: usize) -> Result<Self> {
+        let layout = Layout::array::<u8>(capacity)?;
+        let ptr = unsafe { alloc(layout) };
+        if ptr.is_null() {
+            return Err("Allocation failed".into());
+        }
+        Ok(Self { ptr, len: 0, capacity })
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        unsafe { from_raw_parts(self.ptr, self.len) }
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        unsafe { from_raw_parts_mut(self.ptr, self.len) }
+    }
+
+    fn push(&mut self, byte: u8) -> Result<()> {
+        if self.len >= self.capacity {
+            return Err("Buffer full".into());
+        }
+        self.as_mut_slice()[self.len] = byte;
+        self.len += 1;
+        Ok(())
+    }
+
+    fn extend(&mut self, bytes: &[u8]) -> Result<()> {
+        if self.len + bytes.len() > self.capacity {
+            return Err("Buffer overflow".into());
+        }
+        self.as_mut_slice()[self.len..self.len + bytes.len()].copy_from_slice(bytes);
+        self.len += bytes.len();
+        Ok(())
+    }
+}
+
+impl Drop for CBuffer {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() {
+            let layout = Layout::array::<u8>(self.capacity).unwrap();
+            unsafe { dealloc(self.ptr, layout) };
+        }
+    }
+}
+
+// Struct passing example
+#[repr(C)]
+struct CPoint {
+    x: c_double,
+    y: c_double,
+}
+
+#[repr(C)]
+struct CRect {
+    x: c_double,
+    y: c_double,
+    width: c_double,
+    height: c_double,
+}
+
+extern "C" {
+    fn rect_contains(rect: *const CRect, point: *const CPoint) -> c_int;
+    fn rect_union(a: *const CRect, b: *const CRect, out: *mut CRect);
+}
+
+// String handling
+fn rust_string_to_c(s: &str) -> CString {
+    CString::new(s).unwrap()
+}
+
+fn c_string_to_rust(ptr: *const c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+}
+
+// Main demonstration
+fn main() {
+    println!("🔗 NOVA FFI Examples");
+    println!("====================\n");
+
+    // Test libm
+    println!("📐 Math functions (libm):");
+    let x = 1.5;
+    println!("  sin({}) = {}", x, libm::sin(x));
+    println!("  cos({}) = {}", x, libm::cos(x));
+    println!("  sqrt({}) = {}", x * x, libm::sqrt(x * x));
+    println!("  pow({}, 3) = {}", x, libm::pow(x, 3.0));
+    println!("  log(e) = {}", libm::log(std::f64::consts::E));
+    println!("  exp(1) = {}", libm::exp(1.0));
+
+    // Test mylib
+    println!("\n📦 Custom library (mylib):");
+    match mylib::init() {
+        Ok(_) => {
+            println!("  Initialized successfully");
+            println!("  Version: {}", mylib::version());
+            
+            let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+            match mylib::compute(&input) {
+                Ok(output) => {
+                    println!("  Input:  {:?}", input);
+                    println!("  Output: {:?}", output);
+                }
+                Err(e) => eprintln!("  Compute error: {}", e),
+            }
+            
+            mylib::cleanup();
+            println!("  Cleaned up");
+        }
+        Err(e) => {
+            println!("  Library not available: {}", e);
+            println!("  (This is expected if mylib is not installed)");
+        }
+    }
+
+    // Test callbacks
+    println!("\n📞 Callback example:");
+    let mut data = CallbackData { values: Vec::new() };
+    let user_data = &mut data as *mut _ as *mut c_void;
+    
+    let result = unsafe { register_callback(my_callback, user_data) };
+    if result == 0 {
+        println!("  Callback registered");
+        unsafe { trigger_callbacks() };
+        println!("  Received values: {:?}", data.values);
+    } else {
+        println!("  Callback registration failed (library not available)");
+    }
+
+    // Test struct passing
+    println!("\n📐 Struct passing:");
+    let rect = CRect { x: 0.0, y: 0.0, width: 10.0, height: 10.0 };
+    let point = CPoint { x: 5.0, y: 5.0 };
+    
+    let contains = unsafe { rect_contains(&rect, &point) };
+    println!("  Point (5,5) in rect (0,0,10,10): {}", contains != 0);
+    
+    let point2 = CPoint { x: 15.0, y: 15.0 };
+    let contains2 = unsafe { rect_contains(&rect, &point2) };
+    println!("  Point (15,15) in rect (0,0,10,10): {}", contains2 != 0);
+
+    // Test union
+    let rect2 = CRect { x: 5.0, y: 5.0, width: 10.0, height: 10.0 };
+    let mut union = CRect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 };
+    unsafe { rect_union(&rect, &rect2, &mut union) };
+    println!("  Union: ({}, {}), {}x{}", union.x, union.y, union.width, union.height);
+
+    // Test memory management
+    println!("\n💾 Memory management:");
+    let mut buffer = CBuffer::new(100).expect("Failed to create buffer");
+    buffer.extend(b"Hello, ").unwrap();
+    buffer.extend(b"NOVA!").unwrap();
+    println!("  Buffer content: {}", String::from_utf8_lossy(buffer.as_slice()));
+    println!("  Buffer len: {}, capacity: {}", buffer.len(), buffer.capacity);
+
+    println!("\n✅ All FFI examples completed!");
+}

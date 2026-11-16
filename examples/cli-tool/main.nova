@@ -1,0 +1,295 @@
+// CLI Tool Example - File Organizer
+// Demonstrates building command-line applications with NOVA
+
+use nova_clap::{Command, Arg, ArgMatches, crate_version}
+use nova_fs::{read_dir, FileType, Metadata, copy, remove_file, create_dir_all}
+use nova_path::{Path, PathBuf}
+use nova_env::{args, current_dir}
+use nova_process::{Command, Stdio}
+use nova_string::{String, ToString}
+use nova_collections::{HashMap, Vec}
+use nova_io::{stdin, stdout, stderr, Write, BufRead, BufReader}
+use nova_time::{Instant, Duration}
+
+#[derive(Debug)]
+struct Config {
+    source: PathBuf,
+    destination: PathBuf,
+    dry_run: bool,
+    verbose: bool,
+    by_extension: bool,
+    by_date: bool,
+    recursive: bool,
+    min_size: Option<u64>,
+    max_size: Option<u64>,
+    extensions: Vec<String>,
+    exclude: Vec<String>,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let matches = build_cli().get_matches();
+    let config = parse_config(&matches)?;
+    
+    if config.verbose {
+        println!("Configuration: {:#?}", config);
+    }
+
+    let organizer = FileOrganizer::new(config);
+    organizer.run()?;
+    
+    Ok(())
+}
+
+fn build_cli() -> Command {
+    Command::new("organize")
+        .version(crate_version!())
+        .about("Organize files by type, date, or custom rules")
+        .arg(Arg::new("source")
+            .short('s')
+            .long("source")
+            .value_name("DIR")
+            .help("Source directory to organize")
+            .default_value("."))
+        .arg(Arg::new("destination")
+            .short('d')
+            .long("dest")
+            .value_name("DIR")
+            .help("Destination directory")
+            .default_value("organized"))
+        .arg(Arg::new("dry-run")
+            .long("dry-run")
+            .help("Show what would be done without making changes")
+            .action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("verbose")
+            .short('v')
+            .long("verbose")
+            .help("Verbose output")
+            .action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("by-extension")
+            .long("by-ext")
+            .help("Organize by file extension")
+            .action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("by-date")
+            .long("by-date")
+            .help("Organize by modification date (YYYY/MM/DD)")
+            .action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("recursive")
+            .short('r')
+            .long("recursive")
+            .help("Process directories recursively")
+            .action(clap::ArgAction::SetTrue))
+        .arg(Arg::new("min-size")
+            .long("min-size")
+            .value_name("BYTES")
+            .help("Minimum file size to process"))
+        .arg(Arg::new("max-size")
+            .long("max-size")
+            .value_name("BYTES")
+            .help("Maximum file size to process"))
+        .arg(Arg::new("extensions")
+            .short('e')
+            .long("ext")
+            .value_name("EXT")
+            .help("File extensions to include (comma-separated)")
+            .value_delimiter(','))
+        .arg(Arg::new("exclude")
+            .long("exclude")
+            .value_name("PATTERN")
+            .help("Patterns to exclude (comma-separated)")
+            .value_delimiter(','))
+}
+
+fn parse_config(matches: &ArgMatches) -> Result<Config, String> {
+    let source = PathBuf::from(matches.get_one::<String>("source").unwrap());
+    let destination = PathBuf::from(matches.get_one::<String>("destination").unwrap());
+    
+    if !source.exists() {
+        return Err(format!("Source directory '{}' does not exist", source.display()));
+    }
+
+    Ok(Config {
+        source,
+        destination,
+        dry_run: matches.get_flag("dry-run"),
+        verbose: matches.get_flag("verbose"),
+        by_extension: matches.get_flag("by-extension"),
+        by_date: matches.get_flag("by-date"),
+        recursive: matches.get_flag("recursive"),
+        min_size: matches.get_one::<String>("min-size").map(|s| s.parse().unwrap()),
+        max_size: matches.get_one::<String>("max-size").map(|s| s.parse().unwrap()),
+        extensions: matches.get_many::<String>("extensions")
+            .map(|v| v.map(|s| s.to_string()).collect())
+            .unwrap_or_default(),
+        exclude: matches.get_many::<String>("exclude")
+            .map(|v| v.map(|s| s.to_string()).collect())
+            .unwrap_or_default(),
+    })
+}
+
+struct FileOrganizer {
+    config: Config,
+    stats: Stats,
+}
+
+#[derive(Default)]
+struct Stats {
+    processed: u64,
+    moved: u64,
+    skipped: u64,
+    errors: u64,
+    bytes_moved: u64,
+}
+
+impl FileOrganizer {
+    fn new(config: Config) -> Self {
+        Self { config, stats: Stats::default() }
+    }
+
+    fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let start = Instant::now();
+        
+        if !self.config.destination.exists() {
+            if !self.config.dry_run {
+                create_dir_all(&self.config.destination)?;
+            }
+            println!("Created destination: {}", self.config.destination.display());
+        }
+
+        self.process_directory(&self.config.source)?;
+        
+        let elapsed = start.elapsed();
+        self.print_summary(elapsed);
+        
+        Ok(())
+    }
+
+    fn process_directory(&mut self, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        let entries = read_dir(dir)?;
+        
+        for entry in entries {
+            let path = entry.path();
+            let metadata = entry.metadata()?;
+            
+            if metadata.is_dir() {
+                if self.config.recursive {
+                    self.process_directory(&path)?;
+                }
+                continue;
+            }
+
+            self.stats.processed += 1;
+            
+            if let Err(e) = self.process_file(&path, &metadata) {
+                self.stats.errors += 1;
+                if self.config.verbose {
+                    eprintln!("Error processing {}: {}", path.display(), e);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn process_file(&mut self, path: &Path, metadata: &Metadata) -> Result<(), Box<dyn std::error::Error>> {
+        // Check size constraints
+        let size = metadata.len();
+        if let Some(min) = self.config.min_size {
+            if size < min { self.stats.skipped += 1; return Ok(()); }
+        }
+        if let Some(max) = self.config.max_size {
+            if size > max { self.stats.skipped += 1; return Ok(()); }
+        }
+
+        // Check extension filter
+        if !self.config.extensions.is_empty() {
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            if !self.config.extensions.iter().any(|e| e == ext) {
+                self.stats.skipped += 1;
+                return Ok(());
+            }
+        }
+
+        // Check exclude patterns
+        for pattern in &self.config.exclude {
+            if path.to_string_lossy().contains(pattern) {
+                self.stats.skipped += 1;
+                return Ok(());
+            }
+        }
+
+        // Determine destination
+        let dest_dir = self.determine_destination(path, metadata)?;
+        let dest_path = dest_dir.join(path.file_name().unwrap());
+
+        if self.config.verbose {
+            println!("{} -> {}", path.display(), dest_path.display());
+        }
+
+        if !self.config.dry_run {
+            create_dir_all(&dest_dir)?;
+            copy(path, &dest_path)?;
+            self.stats.moved += 1;
+            self.stats.bytes_moved += size;
+        }
+
+        Ok(())
+    }
+
+    fn determine_destination(&self, path: &Path, metadata: &Metadata) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let mut dest = self.config.destination.clone();
+
+        if self.config.by_extension {
+            let ext = path.extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("no_extension");
+            dest.push(ext);
+        } else if self.config.by_date {
+            let modified = metadata.modified()?;
+            let datetime: chrono::DateTime<chrono::Local> = modified.into();
+            dest.push(datetime.format("%Y").to_string());
+            dest.push(datetime.format("%m").to_string());
+            dest.push(datetime.format("%d").to_string());
+        } else {
+            // Default: by file type
+            let mime = infer_mime_type(path);
+            dest.push(mime);
+        }
+
+        Ok(dest)
+    }
+
+    fn print_summary(&self, elapsed: Duration) {
+        println!("\n=== Summary ===");
+        println!("Processed: {}", self.stats.processed);
+        println!("Moved:     {}", self.stats.moved);
+        println!("Skipped:   {}", self.stats.skipped);
+        println!("Errors:    {}", self.stats.errors);
+        println!("Bytes:     {}", format_bytes(self.stats.bytes_moved));
+        println!("Time:      {:.2}s", elapsed.as_secs_f32());
+    }
+}
+
+fn infer_mime_type(path: &Path) -> String {
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    match ext.to_lowercase().as_str() {
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "webp" | "svg" => "images",
+        "mp4" | "mkv" | "avi" | "mov" | "webm" | "flv" => "videos",
+        "mp3" | "wav" | "flac" | "ogg" | "m4a" => "audio",
+        "pdf" | "doc" | "docx" | "txt" | "md" | "rtf" => "documents",
+        "zip" | "tar" | "gz" | "rar" | "7z" => "archives",
+        "exe" | "msi" | "dmg" | "appimage" => "applications",
+        "rs" | "py" | "js" | "ts" | "java" | "cpp" | "c" | "h" | "go" => "source_code",
+        _ => "other",
+    }.to_string()
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{:.1} {}", size, UNITS[unit])
+}

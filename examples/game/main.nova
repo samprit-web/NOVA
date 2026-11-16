@@ -1,0 +1,251 @@
+// Game Example - Simple 2D Game Loop
+// Demonstrates NOVA for game development
+
+use nova_graphics::{Window, Color, Key, Event, Renderer}
+use nova_math::{Vec2, Rect}
+use nova_time::{Instant, Duration}
+use std::time::Duration as StdDuration
+
+const WIDTH: u32 = 800
+const HEIGHT: u32 = 600
+const PLAYER_SPEED: f32 = 300.0
+const BULLET_SPEED: f32 = 500.0
+const ENEMY_SPEED: f32 = 100.0
+const SPAWN_INTERVAL: f32 = 1.0
+
+struct Game {
+    window: Window,
+    renderer: Renderer,
+    player: Player,
+    bullets: Vec<Bullet>,
+    enemies: Vec<Enemy>,
+    last_spawn: Instant,
+    score: u32,
+    running: bool,
+}
+
+struct Player {
+    pos: Vec2,
+    size: Vec2,
+    color: Color,
+    last_shot: Instant,
+}
+
+struct Bullet {
+    pos: Vec2,
+    vel: Vec2,
+    size: Vec2,
+    color: Color,
+}
+
+struct Enemy {
+    pos: Vec2,
+    size: Vec2,
+    vel: Vec2,
+    color: Color,
+    health: u32,
+}
+
+impl Game {
+    fn new() -> Result<Self, String> {
+        let window = Window::new("NOVA Game", WIDTH, HEIGHT)?;
+        let renderer = Renderer::new(&window)?;
+        
+        Ok(Self {
+            window,
+            renderer,
+            player: Player {
+                pos: Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 - 50.0),
+                size: Vec2::new(40.0, 20.0),
+                color: Color::CYAN,
+                last_shot: Instant::now(),
+            },
+            bullets: Vec::new(),
+            enemies: Vec::new(),
+            last_spawn: Instant::now(),
+            score: 0,
+            running: true,
+        })
+    }
+
+    fn run(&mut self) {
+        let mut last_time = Instant::now();
+        
+        while self.running {
+            let current_time = Instant::now();
+            let dt = current_time.duration_since(last_time).as_secs_f32();
+            last_time = current_time;
+
+            self.handle_events();
+            self.update(dt);
+            self.render();
+            
+            // Cap at 60 FPS
+            let frame_time = Instant::now().duration_since(current_time);
+            let target_frame = StdDuration::from_millis(16);
+            if frame_time < target_frame {
+                std::thread::sleep(target_frame - frame_time);
+            }
+        }
+    }
+
+    fn handle_events(&mut self) {
+        while let Some(event) = self.window.poll_event() {
+            match event {
+                Event::Quit => self.running = false,
+                Event::KeyDown(Key::Escape) => self.running = false,
+                Event::KeyDown(Key::Space) => self.shoot(),
+                _ => {}
+            }
+        }
+
+        // Continuous movement
+        let keys = self.window.get_keys();
+        if keys.contains(Key::Left) || keys.contains(Key::A) {
+            self.player.pos.x -= PLAYER_SPEED * 0.016;
+        }
+        if keys.contains(Key::Right) || keys.contains(Key::D) {
+            self.player.pos.x += PLAYER_SPEED * 0.016;
+        }
+        if keys.contains(Key::Up) || keys.contains(Key::W) {
+            self.player.pos.y -= PLAYER_SPEED * 0.016;
+        }
+        if keys.contains(Key::Down) || keys.contains(Key::S) {
+            self.player.pos.y += PLAYER_SPEED * 0.016;
+        }
+
+        // Clamp to screen
+        self.player.pos.x = self.player.pos.x.clamp(0.0, WIDTH as f32 - self.player.size.x);
+        self.player.pos.y = self.player.pos.y.clamp(0.0, HEIGHT as f32 - self.player.size.y);
+    }
+
+    fn shoot(&mut self) {
+        let now = Instant::now();
+        if now.duration_since(self.player.last_shot).as_secs_f32() > 0.2 {
+            self.bullets.push(Bullet {
+                pos: Vec2::new(
+                    self.player.pos.x + self.player.size.x / 2.0 - 2.0,
+                    self.player.pos.y,
+                ),
+                vel: Vec2::new(0.0, -BULLET_SPEED),
+                size: Vec2::new(4.0, 10.0),
+                color: Color::YELLOW,
+            });
+            self.player.last_shot = now;
+        }
+    }
+
+    fn update(&mut self, dt: f32) {
+        // Spawn enemies
+        if self.last_spawn.elapsed().as_secs_f32() > SPAWN_INTERVAL {
+            self.spawn_enemy();
+            self.last_spawn = Instant::now();
+        }
+
+        // Update bullets
+        for bullet in &mut self.bullets {
+            bullet.pos += bullet.vel * dt;
+        }
+        self.bullets.retain(|b| b.pos.y > -b.size.y);
+
+        // Update enemies
+        for enemy in &mut self.enemies {
+            enemy.pos += enemy.vel * dt;
+        }
+        self.enemies.retain(|e| e.pos.y < HEIGHT as f32 + e.size.y);
+
+        // Collision detection
+        self.check_collisions();
+    }
+
+    fn spawn_enemy(&mut self) {
+        let x = rand::random::<f32>() * (WIDTH as f32 - 40.0);
+        self.enemies.push(Enemy {
+            pos: Vec2::new(x, -30.0),
+            size: Vec2::new(40.0, 30.0),
+            vel: Vec2::new(0.0, ENEMY_SPEED),
+            color: Color::RED,
+            health: 1,
+        });
+    }
+
+    fn check_collisions(&mut self) {
+        let player_rect = Rect::new(self.player.pos, self.player.size);
+        
+        // Bullet vs Enemy
+        let mut bullets_to_remove = Vec::new();
+        let mut enemies_to_remove = Vec::new();
+
+        for (i, bullet) in self.bullets.iter().enumerate() {
+            let bullet_rect = Rect::new(bullet.pos, bullet.size);
+            for (j, enemy) in self.enemies.iter().enumerate() {
+                let enemy_rect = Rect::new(enemy.pos, enemy.size);
+                if bullet_rect.intersects(&enemy_rect) {
+                    bullets_to_remove.push(i);
+                    enemies_to_remove.push(j);
+                    self.score += 10;
+                    break;
+                }
+            }
+        }
+
+        // Remove in reverse order to maintain indices
+        for &i in bullets_to_remove.iter().rev() {
+            self.bullets.remove(i);
+        }
+        for &j in enemies_to_remove.iter().rev() {
+            self.enemies.remove(j);
+        }
+
+        // Enemy vs Player
+        for enemy in &self.enemies {
+            let enemy_rect = Rect::new(enemy.pos, enemy.size);
+            if player_rect.intersects(&enemy_rect) {
+                self.running = false;
+                println!("Game Over! Score: {}", self.score);
+                break;
+            }
+        }
+    }
+
+    fn render(&mut self) {
+        self.renderer.clear(Color::BLACK);
+
+        // Draw player
+        self.renderer.draw_rect(
+            Rect::new(self.player.pos, self.player.size),
+            self.player.color,
+        );
+
+        // Draw bullets
+        for bullet in &self.bullets {
+            self.renderer.draw_rect(
+                Rect::new(bullet.pos, bullet.size),
+                bullet.color,
+            );
+        }
+
+        // Draw enemies
+        for enemy in &self.enemies {
+            self.renderer.draw_rect(
+                Rect::new(enemy.pos, enemy.size),
+                enemy.color,
+            );
+        }
+
+        // Draw score
+        self.renderer.draw_text(
+            &format!("Score: {}", self.score),
+            Vec2::new(10.0, 10.0),
+            24.0,
+            Color::WHITE,
+        );
+
+        self.renderer.present();
+    }
+}
+
+fn main() {
+    let mut game = Game::new().expect("Failed to create game");
+    game.run();
+}

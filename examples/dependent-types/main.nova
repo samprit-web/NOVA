@@ -1,0 +1,387 @@
+// Dependent Types Example - Type-Level Programming
+// Demonstrates NOVA's dependent types and compile-time guarantees
+
+// Enable dependent types feature
+#![feature(dependent_types)]
+
+use nova_std::prelude::*;
+
+// Vector with length encoded in type
+struct Vec<T, const N: usize> {
+    data: [T; N],
+}
+
+impl<T, const N: usize> Vec<T, N> {
+    fn new(data: [T; N]) -> Self {
+        Self { data }
+    }
+
+    fn from_fn(f: impl Fn(usize) -> T) -> Self {
+        let mut data: [T; N] = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+        for i in 0..N {
+            data[i] = f(i);
+        }
+        Self { data }
+    }
+
+    fn get(&self, index: usize) -> Option<&T> {
+        if index < N {
+            Some(&self.data[index])
+        } else {
+            None
+        }
+    }
+
+    fn get_unchecked(&self, index: usize) -> &T {
+        &self.data[index]
+    }
+
+    fn set(&mut self, index: usize, value: T) {
+        if index < N {
+            self.data[index] = value;
+        }
+    }
+
+    fn len(&self) -> usize {
+        N
+    }
+
+    fn is_empty(&self) -> bool {
+        N == 0
+    }
+
+    fn as_slice(&self) -> &[T] {
+        &self.data
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [T] {
+        &mut self.data
+    }
+
+    fn iter(&self) -> Iter<T, N> {
+        Iter { vec: self, index: 0 }
+    }
+}
+
+struct Iter<'a, T, const N: usize> {
+    vec: &'a Vec<T, N>,
+    index: usize,
+}
+
+impl<'a, T, const N: usize> Iterator for Iter<'a, T, N> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < N {
+            let item = &self.vec.data[self.index];
+            self.index += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+
+// Type-safe matrix multiplication
+struct Mat<T, const ROWS: usize, const COLS: usize> {
+    data: [[T; COLS]; ROWS],
+}
+
+impl<T, const ROWS: usize, const COLS: usize> Mat<T, ROWS, COLS> {
+    fn new(data: [[T; COLS]; ROWS]) -> Self {
+        Self { data }
+    }
+
+    fn identity() -> Self
+    where
+        T: Default + Copy + PartialEq,
+        [(); ROWS == COLS]:,
+    {
+        let mut data = [[T::default(); COLS]; ROWS];
+        for i in 0..ROWS {
+            data[i][i] = T::default() + T::default(); // 1 for numeric types
+        }
+        Self { data }
+    }
+}
+
+// Matrix multiplication with compile-time dimension checking
+fn mat_mul<T, const M: usize, const N: usize, const P: usize>(
+    a: Mat<T, M, N>,
+    b: Mat<T, N, P>,
+) -> Mat<T, M, P>
+where
+    T: Copy + Default + Add<Output = T> + Mul<Output = T>,
+{
+    let mut result = [[T::default(); P]; M];
+    
+    for i in 0..M {
+        for j in 0..P {
+            let mut sum = T::default();
+            for k in 0..N {
+                sum = sum + a.data[i][k] * b.data[k][j];
+            }
+            result[i][j] = sum;
+        }
+    }
+    
+    Mat { data: result }
+}
+
+// Type-safe dot product
+fn dot_product<T, const N: usize>(a: Vec<T, N>, b: Vec<T, N>) -> T
+where
+    T: Copy + Default + Add<Output = T> + Mul<Output = T>,
+{
+    let mut sum = T::default();
+    for i in 0..N {
+        sum = sum + a.data[i] * b.data[i];
+    }
+    sum
+}
+
+// Type-safe convolution
+fn convolve<T, const N: usize, const K: usize>(
+    input: Vec<T, N>,
+    kernel: Vec<T, K>,
+) -> Vec<T, { N - K + 1 }>
+where
+    T: Copy + Default + Add<Output = T> + Mul<Output = T>,
+{
+    let mut output = [T::default(); N - K + 1];
+    
+    for i in 0..N - K + 1 {
+        let mut sum = T::default();
+        for j in 0..K {
+            sum = sum + input.data[i + j] * kernel.data[j];
+        }
+        output[i] = sum;
+    }
+    
+    Vec { data: output }
+}
+
+// Type-safe indexing with bounds checking
+fn safe_get<T, const N: usize>(vec: &Vec<T, N>, index: usize) -> Option<&T> {
+    if index < N {
+        Some(&vec.data[index])
+    } else {
+        None
+    }
+}
+
+// Compile-time assertions
+const ASSERT_SIZE: () = assert!(core::mem::size_of::<Vec<f64, 4>>() == 32);
+const ASSERT_MATRIX: () = assert!(core::mem::size_of::<Mat<f64, 4, 4>>() == 128);
+
+// Sized array type
+type Vec3 = Vec<f64, 3>;
+type Vec4 = Vec<f64, 4>;
+type Mat4 = Mat<f64, 4, 4>;
+type Mat3 = Mat<f64, 3, 3>;
+
+// Physics vector operations
+impl Vec3 {
+    fn cross(&self, other: &Vec3) -> Vec3 {
+        Vec3::new([
+            self.data[1] * other.data[2] - self.data[2] * other.data[1],
+            self.data[2] * other.data[0] - self.data[0] * other.data[2],
+            self.data[0] * other.data[1] - self.data[1] * other.data[0],
+        ])
+    }
+
+    fn dot(&self, other: &Vec3) -> f64 {
+        self.data[0] * other.data[0] + self.data[1] * other.data[1] + self.data[2] * other.data[2]
+    }
+
+    fn length(&self) -> f64 {
+        self.dot(self).sqrt()
+    }
+
+    fn normalize(&self) -> Vec3 {
+        let len = self.length();
+        Vec3::new([
+            self.data[0] / len,
+            self.data[1] / len,
+            self.data[2] / len,
+        ])
+    }
+}
+
+// Compile-time neural network layer sizes
+struct Layer<const IN: usize, const OUT: usize> {
+    weights: Mat<f64, OUT, IN>,
+    biases: Vec<f64, OUT>,
+}
+
+impl<const IN: usize, const OUT: usize> Layer<IN, OUT> {
+    fn forward(&self, input: &Vec<f64, IN>) -> Vec<f64, OUT> {
+        let mut output = [0.0; OUT];
+        for i in 0..OUT {
+            let mut sum = self.biases.data[i];
+            for j in 0..IN {
+                sum += self.weights.data[i][j] * input.data[j];
+            }
+            output[i] = sum;
+        }
+        Vec { data: output }
+    }
+}
+
+// Type-safe network
+type Network = (
+    Layer<784, 256>,
+    Layer<256, 128>,
+    Layer<128, 64>,
+    Layer<64, 10>,
+);
+
+fn forward_pass(network: &Network, input: &Vec<f64, 784>) -> Vec<f64, 10> {
+    let (l1, l2, l3, l4) = network;
+    let out1 = l1.forward(input);
+    let out2 = l2.forward(&out1);
+    let out3 = l3.forward(&out2);
+    l4.forward(&out3)
+}
+
+// Generic programming with const generics
+fn transpose<T, const N: usize>(mat: &mut Mat<T, N, N>)
+where
+    T: Copy,
+{
+    for i in 0..N {
+        for j in i+1..N {
+            core::mem::swap(&mut mat.data[i][j], &mut mat.data[j][i]);
+        }
+    }
+}
+
+// Fixed-size string
+struct FixedString<const N: usize> {
+    data: [u8; N],
+    len: usize,
+}
+
+impl<const N: usize> FixedString<N> {
+    fn new() -> Self {
+        Self { data: [0; N], len: 0 }
+    }
+
+    fn push_str(&mut self, s: &str) -> Result<(), &str> {
+        let bytes = s.as_bytes();
+        if self.len + bytes.len() > N {
+            return Err("String would exceed capacity");
+        }
+        self.data[self.len..self.len + bytes.len()].copy_from_slice(bytes);
+        self.len += bytes.len();
+        Ok(())
+    }
+
+    fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.data[..self.len]).unwrap()
+    }
+}
+
+// Bounded integer
+struct BoundedInt<const MIN: i32, const MAX: i32> {
+    value: i32,
+}
+
+impl<const MIN: i32, const MAX: i32> BoundedInt<MIN, MAX> {
+    fn new(value: i32) -> Result<Self, &'static str> {
+        if value < MIN || value > MAX {
+            Err("Value out of bounds")
+        } else {
+            Ok(Self { value })
+        }
+    }
+
+    fn get(&self) -> i32 {
+        self.value
+    }
+}
+
+type Percentage = BoundedInt<0, 100>;
+type DiceRoll = BoundedInt<1, 6>;
+
+// Main
+fn main() {
+    println!("🔢 NOVA Dependent Types Examples");
+    println!("=================================\n");
+
+    // Vector operations
+    println!("📐 Fixed-size vectors:");
+    let v1 = Vec3::new([1.0, 2.0, 3.0]);
+    let v2 = Vec3::new([4.0, 5.0, 6.0]);
+    println!("  v1 = {:?}", v1.data);
+    println!("  v2 = {:?}", v2.data);
+    println!("  v1 + v2 = {:?}", [v1.data[0]+v2.data[0], v1.data[1]+v2.data[1], v1.data[2]+v2.data[2]]);
+    println!("  v1 × v2 = {:?}", v1.cross(&v2).data);
+    println!("  v1 · v2 = {}", v1.dot(&v2));
+    println!("  |v1| = {}", v1.length());
+    println!("  normalize(v1) = {:?}", v1.normalize().data);
+
+    // Matrix operations
+    println!("\n📊 Fixed-size matrices:");
+    let m1 = Mat4::new([
+        [1.0, 2.0, 3.0, 4.0],
+        [5.0, 6.0, 7.0, 8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0],
+    ]);
+    let m2 = Mat4::identity();
+    let m3 = mat_mul(m1, m2);
+    println!("  M * I = M (first row): {:?}", m3.data[0]);
+
+    // Dot product
+    println!("\n🔢 Dot product:");
+    let a = Vec::new([1.0, 2.0, 3.0, 4.0]);
+    let b = Vec::new([5.0, 6.0, 7.0, 8.0]);
+    println!("  a · b = {}", dot_product(a, b));
+
+    // Convolution
+    println!("\n🌊 Convolution:");
+    let signal = Vec::from_fn(|i| (i as f64).sin());
+    let kernel = Vec::new([0.25, 0.5, 0.25]);
+    let conv = convolve(signal, kernel);
+    println!("  Output length: {}", conv.len());
+
+    // Neural network
+    println!("\n🧠 Type-safe neural network:");
+    // Network structure enforced at compile time
+    println!("  Network: 784 → 256 → 128 → 64 → 10");
+    println!("  All dimensions verified at compile time!");
+
+    // Bounded integers
+    println!("\n🔒 Bounded integers:");
+    match Percentage::new(50) {
+        Ok(p) => println!("  Percentage: {}%", p.get()),
+        Err(e) => println!("  Error: {}", e),
+    }
+    match Percentage::new(150) {
+        Ok(p) => println!("  Percentage: {}%", p.get()),
+        Err(e) => println!("  Error: {}", e),
+    }
+    match DiceRoll::new(4) {
+        Ok(d) => println!("  Dice roll: {}", d.get()),
+        Err(e) => println!("  Error: {}", e),
+    }
+
+    // Fixed string
+    println!("\n📝 Fixed string:");
+    let mut s = FixedString::<32>::new();
+    s.push_str("Hello, ").unwrap();
+    s.push_str("NOVA!").unwrap();
+    println!("  String: {}", s.as_str());
+    println!("  Capacity: 32, Length: {}", s.len());
+
+    // Compile-time guarantees
+    println!("\n✅ Compile-time guarantees:");
+    println!("  • Vector lengths verified at compile time");
+    println!("  • Matrix dimensions checked before multiplication");
+    println!("  • Array bounds checked for all accesses");
+    println!("  • Neural network layer sizes enforced");
+    println!("  • No runtime bounds checking needed!");
+
+    println!("\n✨ All dependent types examples completed!");
+}

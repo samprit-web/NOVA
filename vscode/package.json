@@ -1,0 +1,235 @@
+{
+  "name": "nova-lang",
+  "displayName": "NOVA Language",
+  "description": "Language support for the NOVA programming language",
+  "version": "1.0.0",
+  "publisher": "nova-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samprit-web/NOVA"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "nova",
+    "programming language",
+    "systems programming",
+    "rust",
+    "webassembly"
+  ],
+  "icon": "icons/nova-icon.png",
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onLanguage:nova",
+    "workspaceContains:nova.toml"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nova",
+        "aliases": ["NOVA", "nova"],
+        "extensions": [".nova"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nova",
+        "scopeName": "source.nova",
+        "path": "./syntaxes/nova.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "nova",
+        "path": "./snippets/nova.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "NOVA Language",
+      "properties": {
+        "nova.formatter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable NOVA formatter"
+        },
+        "nova.linter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable NOVA linter (clippy)"
+        },
+        "nova.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run nova check on save"
+        },
+        "nova.buildOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run nova build on save"
+        },
+        "nova.testOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run nova test on save"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "nova.build",
+        "title": "NOVA: Build Project",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.run",
+        "title": "NOVA: Run Project",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.test",
+        "title": "NOVA: Run Tests",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.check",
+        "title": "NOVA: Check Project",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.fmt",
+        "title": "NOVA: Format Document",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.new",
+        "title": "NOVA: New Project",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.add",
+        "title": "NOVA: Add Dependency",
+        "category": "NOVA"
+      },
+      {
+        "command": "nova.doc",
+        "title": "NOVA: Generate Documentation",
+        "category": "NOVA"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "nova.build",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "editorTextFocus && resourceLangId == nova"
+      },
+      {
+        "command": "nova.run",
+        "key": "ctrl+f5",
+        "mac": "cmd+f5",
+        "when": "editorTextFocus && resourceLangId == nova"
+      },
+      {
+        "command": "nova.test",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "editorTextFocus && resourceLangId == nova"
+      },
+      {
+        "command": "nova.fmt",
+        "key": "shift+alt+f",
+        "mac": "shift+option+f",
+        "when": "editorTextFocus && resourceLangId == nova"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "nova.build",
+          "when": "resourceLangId == nova",
+          "group": "navigation@1"
+        },
+        {
+          "command": "nova.run",
+          "when": "resourceLangId == nova",
+          "group": "navigation@2"
+        },
+        {
+          "command": "nova.test",
+          "when": "resourceLangId == nova",
+          "group": "navigation@3"
+        },
+        {
+          "command": "nova.fmt",
+          "when": "resourceLangId == nova",
+          "group": "navigation@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "nova.new",
+          "when": "explorerResourceIsRoot",
+          "group": "nova@1"
+        },
+        {
+          "command": "nova.add",
+          "when": "resourceExtname == .nova",
+          "group": "nova@2"
+        }
+      ]
+    },
+    "debuggers": [
+      {
+        "type": "nova",
+        "label": "NOVA Debug",
+        "program": "./src/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the NOVA executable to debug"
+              },
+              "args": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Arguments passed to the program"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory"
+              },
+              "env": {
+                "type": "object",
+                "description": "Environment variables"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vscode-test": "^1.6.0"
+  }
+}

@@ -1,0 +1,343 @@
+// WASM Example - Browser Game
+// Compiles to WebAssembly for running in browsers
+
+// WASM imports
+#[link(wasm_import_module = "env")]
+extern "C" {
+    fn js_log(ptr: *const u8, len: usize);
+    fn js_get_time() -> f64;
+    fn js_request_animation_frame(callback: *const u8);
+    fn js_canvas_width() -> u32;
+    fn js_canvas_height() -> u32;
+    fn js_clear_rect(x: f32, y: f32, w: f32, h: f32);
+    fn js_fill_rect(x: f32, y: f32, w: f32, h: f32, r: u8, g: u8, b: u8, a: u8);
+    fn js_fill_text(ptr: *const u8, len: usize, x: f32, y: f32, size: f32, r: u8, g: u8, b: u8, a: u8);
+    fn js_on_key_down(callback: *const u8);
+    fn js_on_key_up(callback: *const u8);
+    fn js_on_mouse_move(callback: *const u8);
+    fn js_on_click(callback: *const u8);
+}
+
+use core::panic::PanicInfo;
+use core::alloc::{GlobalAlloc, Layout};
+
+// Simple allocator for WASM
+struct WasmAllocator;
+unsafe impl GlobalAlloc for WasmAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // Use wasm heap
+        let ptr = wasm_alloc(layout.size());
+        if ptr.is_null() { core::alloc::handle_alloc_error(layout); }
+        ptr
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        wasm_free(ptr);
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: WasmAllocator = WasmAllocator;
+
+extern "C" {
+    fn wasm_alloc(size: usize) -> *mut u8;
+    fn wasm_free(ptr: *mut u8);
+}
+
+// Panic handler
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    unsafe { js_log(b"Panic!\0".as_ptr(), 7); }
+    core::hint::unreachable_unchecked()
+}
+
+// Game state
+struct Game {
+    canvas_width: u32,
+    canvas_height: u32,
+    player: Player,
+    particles: Vec<Particle>,
+    last_time: f64,
+    score: u32,
+    running: bool,
+}
+
+struct Player {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    radius: f32,
+    color: Color,
+}
+
+struct Particle {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    life: f32,
+    max_life: f32,
+    color: Color,
+}
+
+struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+}
+
+impl Game {
+    fn new() -> Self {
+        let canvas_width = unsafe { js_canvas_width() };
+        let canvas_height = unsafe { js_canvas_height() };
+        
+        Self {
+            canvas_width,
+            canvas_height,
+            player: Player {
+                x: canvas_width as f32 / 2.0,
+                y: canvas_height as f32 / 2.0,
+                vx: 0.0,
+                vy: 0.0,
+                radius: 20.0,
+                color: Color { r: 0, g: 200, b: 255, a: 255 },
+            },
+            particles: Vec::new(),
+            last_time: unsafe { js_get_time() },
+            score: 0,
+            running: true,
+        }
+    }
+
+    fn init(&mut self) {
+        // Set up event handlers
+        unsafe {
+            js_on_key_down(key_down_callback as *const u8);
+            js_on_key_up(key_up_callback as *const u8);
+            js_on_mouse_move(mouse_move_callback as *const u8);
+            js_on_click(click_callback as *const u8);
+        }
+        
+        // Start game loop
+        self.game_loop();
+    }
+
+    fn game_loop(&mut self) {
+        let callback = game_loop_callback as *const u8;
+        unsafe { js_request_animation_frame(callback); }
+    }
+
+    fn update(&mut self, dt: f32) {
+        // Player physics
+        self.player.vx *= 0.95;
+        self.player.vy *= 0.95;
+        self.player.x += self.player.vx * dt;
+        self.player.y += self.player.vy * dt;
+
+        // Clamp to canvas
+        self.player.x = self.player.x.clamp(self.player.radius, self.canvas_width as f32 - self.player.radius);
+        self.player.y = self.player.y.clamp(self.player.radius, self.canvas_height as f32 - self.player.radius);
+
+        // Update particles
+        self.particles.retain_mut(|p| {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+            p.life > 0.0
+        });
+
+        // Spawn trail particles
+        if (self.player.vx.abs() + self.player.vy.abs()) > 10.0 {
+            self.spawn_particle();
+        }
+    }
+
+    fn spawn_particle(&mut self) {
+        self.particles.push(Particle {
+            x: self.player.x,
+            y: self.player.y,
+            vx: (rand::random::<f32>() - 0.5) * 50.0,
+            vy: (rand::random::<f32>() - 0.5) * 50.0,
+            life: 0.5,
+            max_life: 0.5,
+            color: Color {
+                r: self.player.color.r,
+                g: self.player.color.g,
+                b: self.player.color.b,
+                a: 128,
+            },
+        });
+    }
+
+    fn render(&self) {
+        // Clear
+        unsafe {
+            js_clear_rect(0.0, 0.0, self.canvas_width as f32, self.canvas_height as f32);
+        }
+
+        // Draw particles
+        for p in &self.particles {
+            let alpha = (p.life / p.max_life * 255.0) as u8;
+            unsafe {
+                js_fill_rect(
+                    p.x - 3.0, p.y - 3.0, 6.0, 6.0,
+                    p.color.r, p.color.g, p.color.b, alpha,
+                );
+            }
+        }
+
+        // Draw player
+        unsafe {
+            js_fill_rect(
+                self.player.x - self.player.radius,
+                self.player.y - self.player.radius,
+                self.player.radius * 2.0,
+                self.player.radius * 2.0,
+                self.player.color.r,
+                self.player.color.g,
+                self.player.color.b,
+                self.player.color.a,
+            );
+        }
+
+        // Draw score
+        let score_text = format!("Score: {}", self.score);
+        unsafe {
+            js_fill_text(
+                score_text.as_ptr(),
+                score_text.len(),
+                10.0, 30.0,
+                20.0,
+                255, 255, 255, 255,
+            );
+        }
+    }
+
+    fn handle_key_down(&mut self, key: &str) {
+        match key {
+            "ArrowUp" | "w" | "W" => self.player.vy -= 500.0,
+            "ArrowDown" | "s" | "S" => self.player.vy += 500.0,
+            "ArrowLeft" | "a" | "A" => self.player.vx -= 500.0,
+            "ArrowRight" | "d" | "D" => self.player.vx += 500.0,
+            " " => self.boost(),
+            _ => {}
+        }
+    }
+
+    fn handle_key_up(&mut self, key: &str) {
+        match key {
+            "ArrowUp" | "ArrowDown" | "w" | "s" | "W" | "S" => self.player.vy *= 0.5,
+            "ArrowLeft" | "ArrowRight" | "a" | "d" | "A" | "D" => self.player.vx *= 0.5,
+            _ => {}
+        }
+    }
+
+    fn handle_mouse_move(&mut self, x: f32, y: f32) {
+        // Could implement mouse following
+    }
+
+    fn handle_click(&mut self, x: f32, y: f32) {
+        // Click to boost toward mouse
+        let dx = x - self.player.x;
+        let dy = y - self.player.y;
+        let dist = (dx * dx + dy * dy).sqrt();
+        if dist > 0.0 {
+            self.player.vx += dx / dist * 300.0;
+            self.player.vy += dy / dist * 300.0;
+        }
+    }
+
+    fn boost(&mut self) {
+        let speed = (self.player.vx * self.player.vx + self.player.vy * self.player.vy).sqrt();
+        if speed > 0.0 {
+            self.player.vx /= speed;
+            self.player.vy /= speed;
+            self.player.vx *= 800.0;
+            self.player.vy *= 800.0;
+        }
+        
+        // Spawn boost particles
+        for _ in 0..10 {
+            self.particles.push(Particle {
+                x: self.player.x,
+                y: self.player.y,
+                vx: (rand::random::<f32>() - 0.5) * 200.0,
+                vy: (rand::random::<f32>() - 0.5) * 200.0,
+                life: 0.3,
+                max_life: 0.3,
+                color: Color { r: 255, g: 255, b: 0, a: 200 },
+            });
+        }
+    }
+}
+
+// Static game instance
+static mut GAME: Option<Game> = None;
+
+// Callbacks (called from JavaScript)
+#[no_mangle]
+extern "C" fn game_loop_callback() {
+    unsafe {
+        if let Some(game) = &mut GAME {
+            let now = js_get_time();
+            let dt = (now - game.last_time) as f32 / 1000.0;
+            game.last_time = now;
+            
+            game.update(dt.min(0.1)); // Clamp dt
+            game.render();
+            
+            // Continue loop
+            game.game_loop();
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn key_down_callback(key_ptr: *const u8, key_len: usize) {
+    unsafe {
+        if let Some(game) = &mut GAME {
+            let key = core::str::from_utf8_unchecked(core::slice::from_raw_parts(key_ptr, key_len));
+            game.handle_key_down(key);
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn key_up_callback(key_ptr: *const u8, key_len: usize) {
+    unsafe {
+        if let Some(game) = &mut GAME {
+            let key = core::str::from_utf8_unchecked(core::slice::from_raw_parts(key_ptr, key_len));
+            game.handle_key_up(key);
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn mouse_move_callback(x: f32, y: f32) {
+    unsafe {
+        if let Some(game) = &mut GAME {
+            game.handle_mouse_move(x, y);
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn click_callback(x: f32, y: f32) {
+    unsafe {
+        if let Some(game) = &mut GAME {
+            game.handle_click(x, y);
+        }
+    }
+}
+
+// Entry point
+#[no_mangle]
+pub extern "C" fn main() {
+    unsafe {
+        GAME = Some(Game::new());
+        if let Some(game) = &mut GAME {
+            game.init();
+        }
+    }
+}

@@ -1,0 +1,369 @@
+// NOVA Language Grammar for Pest Parser
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+keyword = {
+    "as" | "async" | "await" | "break" | "const" | "continue" | "crate" | "do"
+    | "else" | "enum" | "extern" | "false" | "fn" | "for" | "if" | "impl"
+    | "in" | "let" | "loop" | "match" | "mod" | "move" | "mut" | "pub"
+    | "ref" | "return" | "self" | "Self" | "static" | "struct" | "super"
+    | "trait" | "true" | "type" | "unsafe" | "use" | "where" | "while"
+    | "yield" | "try" | "catch" | "throw" | "spawn" | "actor" | "channel"
+    | "select" | "defer" | "drop" | "box" | "dyn" | "abstract" | "final"
+    | "override" | "virtual" | "sealed" | "open" | "inline" | "noinline"
+    | "const_eval" | "comptime" | "effect" | "handle" | "resume" | "linear"
+    | "unique" | "shared" | "atomic" | "volatile" | "unaligned" | "packed"
+    | "transparent" | "repr" | "align" | "cfg" | "cfg_attr" | "derive"
+    | "macro" | "macro_rules" | "include" | "include_str" | "include_bytes"
+    | "concat" | "stringify" | "file" | "line" | "column" | "module_path"
+    | "compile_error" | "compile_warning" | "todo" | "unimplemented"
+    | "unreachable" | "panic" | "assert" | "assert_eq" | "assert_ne"
+    | "debug_assert" | "debug_assert_eq" | "debug_assert_ne"
+}
+
+// ============================================================================
+// IDENTIFIERS
+// ============================================================================
+
+identifier = @{ (ASCII_ALPHABETIC | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+raw_identifier = @{ "r#" ~ identifier }
+ident = { raw_identifier | identifier }
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+// Integer literals
+integer = {
+    (bin_int | oct_int | hex_int | dec_int) ~ integer_suffix?
+}
+bin_int = { "0b" ~ ("0" | "1")+ ~ ("_" ~ ("0" | "1")+)* }
+oct_int = { "0o" ~ ("0".."7")+ ~ ("_" ~ ("0".."7")+)* }
+hex_int = { "0x" ~ HEX_DIGIT+ ~ ("_" ~ HEX_DIGIT+)* }
+dec_int = { "0" | (NONZERO_DIGIT ~ DIGIT* ~ ("_" ~ DIGIT+)*) }
+integer_suffix = { "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
+                  | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" }
+
+// Float literals
+float = {
+    (dec_float | hex_float) ~ float_suffix?
+}
+dec_float = {
+    (DIGIT+ ~ "." ~ DIGIT* ~ exponent?) |
+    (DIGIT+ ~ exponent) |
+    ("." ~ DIGIT+ ~ exponent?)
+}
+hex_float = {
+    "0x" ~ HEX_DIGIT+ ~ "." ~ HEX_DIGIT* ~ hex_exponent? |
+    "0x" ~ HEX_DIGIT+ ~ hex_exponent
+}
+exponent = { ("e" | "E") ~ ("+" | "-")? ~ DIGIT+ }
+hex_exponent = { ("p" | "P") ~ ("+" | "-")? ~ DIGIT+ }
+float_suffix = { "f16" | "f32" | "f64" | "f128" }
+
+// Character literals
+char = {
+    "'" ~ (escape_sequence | ASCII_PRINTABLE - "'" - "\\") ~ "'"
+}
+
+// String literals
+string = {
+    "\"" ~ (escape_sequence | ASCII_PRINTABLE - "\"" - "\\")* ~ "\""
+}
+raw_string = {
+    "r" ~ "#"* ~ "\"" ~ (!("\"" ~ "#"* ) ~ ANY)* ~ "\"" ~ "#"*
+}
+byte_string = {
+    "b" ~ "\"" ~ (byte_escape | ASCII_PRINTABLE - "\"" - "\\")* ~ "\""
+}
+raw_byte_string = {
+    "br" ~ "#"* ~ "\"" ~ (!("\"" ~ "#"* ) ~ ANY)* ~ "\"" ~ "#"*
+}
+
+// Escape sequences
+escape_sequence = {
+    "\\" ~ (
+        "n" | "r" | "t" | "\\" | "\"" | "'" | "0" |
+        "x" ~ HEX_DIGIT ~ HEX_DIGIT |
+        "u" ~ "{" ~ HEX_DIGIT{1,6} ~ "}"
+    )
+}
+byte_escape = {
+    "\\" ~ (
+        "n" | "r" | "t" | "\\" | "\"" | "'" | "0" |
+        "x" ~ HEX_DIGIT ~ HEX_DIGIT
+    )
+}
+
+// Boolean
+bool = { "true" | "false" }
+
+// Unit
+unit = { "()" }
+
+// ============================================================================
+// OPERATORS AND PUNCTUATION
+// ============================================================================
+
+// Operators
+operator = {
+    // Arithmetic
+    "+" | "-" | "*" | "/" | "%" |
+    // Bitwise
+    "&" | "|" | "^" | "<<" | ">>" |
+    // Comparison
+    "==" | "!=" | "<" | ">" | "<=" | ">=" |
+    // Logical
+    "&&" | "||" | "!" |
+    // Assignment
+    "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" |
+    // Other
+    "." | ".." | "..." | "->" | "=>" | "<-" | "::" | ":" | ";" | "," | "?"
+    | "|>" | "<|" | "@" | "#" | "$" | "%" | "~" | "`"
+}
+
+// Punctuation
+punct = {
+    "(" | ")" | "[" | "]" | "{" | "}" | "|" | ":" | ";" | "," | "." | ".." | "..."
+    | "->" | "=>" | "<-" | "::" | "?" | "@" | "#" | "$" | "%" | "~" | "`"
+}
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+type = {
+    tuple_type | array_type | slice_type | ref_type | box_type | fn_type
+    | trait_object_type | impl_trait_type | path_type | paren_type | never_type
+}
+
+tuple_type = { "(" ~ type? ~ ("," ~ type)+ ~ ","? ~ ")" }
+array_type = { "[" ~ type ~ ";" ~ expr ~ "]" }
+slice_type = { "[" ~ type ~ "]" }
+ref_type = { "&" ~ "mut"? ~ type }
+box_type = { "Box" ~ "<" ~ type ~ ">" }
+fn_type = { "fn" ~ "(" ~ type_list? ~ ")" ~ ("->" ~ type)? }
+trait_object_type = { "dyn" ~ trait_bounds }
+impl_trait_type = { "impl" ~ trait_bounds }
+path_type = { ident ~ generic_args? ~ ("::" ~ ident ~ generic_args?)* }
+paren_type = { "(" ~ type ~ ")" }
+never_type = { "!" }
+
+type_list = { type ~ ("," ~ type)* ~ ","? }
+generic_args = { "<" ~ type_list? ~ ">" }
+trait_bounds = { trait_bound ~ ("+" ~ trait_bound)* }
+trait_bound = { path_type ~ generic_args? }
+
+// ============================================================================
+// PATTERNS
+// ============================================================================
+
+pattern = {
+    wildcard_pattern | literal_pattern | binding_pattern | tuple_pattern
+    | struct_pattern | enum_pattern | slice_pattern | or_pattern | ref_pattern
+    | range_pattern | guard_pattern
+}
+
+wildcard_pattern = { "_" }
+literal_pattern = { literal }
+binding_pattern = { ident ~ ("@" ~ pattern)? }
+tuple_pattern = { "(" ~ pattern? ~ ("," ~ pattern)+ ~ ","? ~ ")" }
+struct_pattern = { path_type ~ "{" ~ field_patterns? ~ "}" }
+field_patterns = { field_pattern ~ ("," ~ field_pattern)* ~ ","? }
+field_pattern = { ident ~ (":" ~ pattern)? }
+enum_pattern = { path_type ~ ("(" ~ pattern_list? ~ ")")? }
+slice_pattern = { "[" ~ pattern_list? ~ ".." ~ pattern? ~ "]" | "[" ~ pattern_list? ~ "]" }
+or_pattern = { pattern ~ ("|" ~ pattern)+ }
+ref_pattern = { "&" ~ "mut"? ~ pattern }
+range_pattern = { expr ~ ".." ~ ("=")? ~ expr }
+guard_pattern = { pattern ~ "if" ~ expr }
+
+pattern_list = { pattern ~ ("," ~ pattern)* ~ ","? }
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+expr = {
+    block_expr | if_expr | match_expr | loop_expr | while_expr | for_expr
+    | try_expr | await_expr | return_expr | break_expr | continue_expr
+    | yield_expr | assign_expr | binary_expr | unary_expr | postfix_expr
+    | primary_expr
+}
+
+block_expr = { "{" ~ stmt* ~ expr? ~ "}" }
+
+if_expr = { "if" ~ expr ~ block_expr ~ ("else" ~ (if_expr | block_expr))? }
+
+match_expr = { "match" ~ expr ~ "{" ~ match_arm* ~ "}" }
+match_arm = { pattern ~ ("if" ~ expr)? ~ "=>" ~ expr ~ ","? }
+
+loop_expr = { "loop" ~ block_expr }
+while_expr = { "while" ~ expr ~ block_expr }
+for_expr = { "for" ~ pattern ~ "in" ~ expr ~ block_expr }
+
+try_expr = { "try" ~ block_expr ~ ("catch" ~ "(" ~ pattern ~ ")" ~ block_expr)* ~ ("finally" ~ block_expr)? }
+await_expr = { expr ~ ".await" }
+return_expr = { "return" ~ expr? }
+break_expr = { "break" ~ ident? ~ expr? }
+continue_expr = { "continue" ~ ident? }
+yield_expr = { "yield" ~ expr? }
+
+assign_expr = { lvalue ~ assign_op ~ expr }
+assign_op = { "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" }
+lvalue = { expr } // Simplified - proper lvalue checking in semantic analysis
+
+binary_expr = { expr ~ bin_op ~ expr }
+bin_op = {
+    // Arithmetic
+    "+" | "-" | "*" | "/" | "%" |
+    // Bitwise
+    "&" | "|" | "^" | "<<" | ">>" |
+    // Comparison
+    "==" | "!=" | "<" | ">" | "<=" | ">=" |
+    // Logical
+    "&&" | "||" |
+    // Other
+    "as" | "is" | "in"
+}
+
+unary_expr = { unary_op ~ expr }
+unary_op = { "-" | "+" | "!" | "~" | "*" | "&" | "&mut" | "box" | "try" }
+
+postfix_expr = { primary_expr ~ postfix_op* }
+postfix_op = {
+    "." ~ ident ~ generic_args? ~ ("(" ~ expr_list? ~ ")")?  // Method call / field access
+    | "(" ~ expr_list? ~ ")"                                 // Call
+    | "[" ~ expr ~ "]"                                       // Index
+    | "?"                                                    // Try
+    | ".." ~ "="? ~ expr                                     // Range
+    | "::" ~ ident ~ generic_args?                           // Path
+    | ".await"                                               // Await
+    | "!"                                                    // Macro
+    | "as" ~ type                                            // Cast
+}
+
+primary_expr = {
+    literal | path_expr | tuple_expr | array_expr | struct_expr
+    | closure_expr | async_block | paren_expr | macro_invocation
+}
+
+literal = { integer | float | char | string | raw_string | byte_string | raw_byte_string | bool | unit }
+
+path_expr = { ident ~ generic_args? ~ ("::" ~ ident ~ generic_args?)* }
+
+tuple_expr = { "(" ~ expr? ~ ("," ~ expr)+ ~ ","? ~ ")" }
+array_expr = { "[" ~ expr_list? ~ "]" }
+struct_expr = { path_type ~ "{" ~ field_exprs? ~ "}" }
+field_exprs = { field_expr ~ ("," ~ field_expr)* ~ ","? }
+field_expr = { ident ~ ":" ~ expr }
+
+closure_expr = { "|" ~ closure_params? ~ "|" ~ ("->" ~ type)? ~ block_expr }
+closure_params = { closure_param ~ ("," ~ closure_param)* ~ ","? }
+closure_param = { ident ~ (":" ~ type)? }
+
+async_block = { "async" ~ block_expr }
+
+paren_expr = { "(" ~ expr ~ ")" }
+
+expr_list = { expr ~ ("," ~ expr)* ~ ","? }
+
+macro_invocation = { ident ~ "!" ~ macro_args }
+macro_args = { "(" ~ token_tree* ~ ")" | "[" ~ token_tree* ~ "]" | "{" ~ token_tree* ~ "}" }
+token_tree = { ident | literal | punct | "(" ~ token_tree* ~ ")" | "[" ~ token_tree* ~ "]" | "{" ~ token_tree* ~ "}" }
+
+// ============================================================================
+// STATEMENTS
+// ============================================================================
+
+stmt = {
+    let_stmt | item_stmt | expr_stmt | macro_stmt
+}
+
+let_stmt = { "let" ~ "mut"? ~ pattern ~ (":" ~ type)? ~ "=" ~ expr ~ ";" }
+item_stmt = { item }
+expr_stmt = { expr ~ ";" }
+macro_stmt = { macro_invocation ~ ";" }
+
+// ============================================================================
+// ITEMS
+// ============================================================================
+
+item = {
+    use_decl | mod_decl | extern_crate | fn_decl | struct_decl | enum_decl
+    | type_alias | trait_decl | impl_decl | const_decl | static_decl
+    | macro_decl | macro_rules_decl | attribute_item
+}
+
+use_decl = { "use" ~ use_tree ~ ";" }
+use_tree = { ident ~ ("::" ~ (ident | "self" | "super" | "crate" | "{" ~ use_tree_list ~ "}"))* }
+use_tree_list = { use_tree ~ ("," ~ use_tree)* ~ ","? }
+
+mod_decl = { ("pub")? ~ "mod" ~ ident ~ (";" | "{" ~ item* ~ "}") }
+extern_crate = { "extern" ~ "crate" ~ ident ~ ";" }
+
+fn_decl = { ("pub")? ~ ("async")? ~ ("unsafe")? ~ ("const")? ~ "fn" ~ ident ~ generic_params? ~ "(" ~ fn_params? ~ ")" ~ ("->" ~ type)? ~ where_clause? ~ (";" | block_expr) }
+generic_params = { "<" ~ generic_param ~ ("," ~ generic_param)* ~ ","? ~ ">" }
+generic_param = { ident ~ (":" ~ trait_bounds)? ~ ("=" ~ type)? }
+fn_params = { fn_param ~ ("," ~ fn_param)* ~ ","? }
+fn_param = { ("mut")? ~ ident ~ ":" ~ type }
+where_clause = { "where" ~ where_predicate ~ ("," ~ where_predicate)* ~ ","? }
+where_predicate = { type ~ ":" ~ trait_bounds }
+
+struct_decl = { ("pub")? ~ "struct" ~ ident ~ generic_params? ~ where_clause? ~ ("{" ~ struct_fields? ~ "}" | "(" ~ tuple_fields? ~ ")" | ";") }
+struct_fields = { struct_field ~ ("," ~ struct_field)* ~ ","? }
+struct_field = { ("pub")? ~ ident ~ ":" ~ type }
+tuple_fields = { type ~ ("," ~ type)* ~ ","? }
+
+enum_decl = { ("pub")? ~ "enum" ~ ident ~ generic_params? ~ where_clause? ~ "{" ~ enum_variants? ~ "}" }
+enum_variants = { enum_variant ~ ("," ~ enum_variant)* ~ ","? }
+enum_variant = { ident ~ ("(" ~ tuple_fields? ~ ")" | "{" ~ struct_fields? ~ "}")? }
+
+type_alias = { ("pub")? ~ "type" ~ ident ~ generic_params? ~ "=" ~ type ~ ";" }
+
+trait_decl = { ("pub")? ~ ("unsafe")? ~ "trait" ~ ident ~ generic_params? ~ where_clause? ~ "{" ~ trait_item* ~ "}" }
+trait_item = {
+    ("pub")? ~ ("const")? ~ "fn" ~ ident ~ generic_params? ~ "(" ~ fn_params? ~ ")" ~ ("->" ~ type)? ~ where_clause? ~ (";" | block_expr)
+    | ("pub")? ~ "type" ~ ident ~ generic_params? ~ (":" ~ trait_bounds)? ~ ("=" ~ type)? ~ ";"
+    | ("pub")? ~ "const" ~ ident ~ ":" ~ type ~ ("=" ~ expr)? ~ ";"
+}
+
+impl_decl = { ("pub")? ~ ("unsafe")? ~ "impl" ~ generic_params? ~ (trait_ref ~ "for")? ~ type ~ where_clause? ~ "{" ~ impl_item* ~ "}" }
+trait_ref = { path_type ~ generic_args? }
+impl_item = {
+    ("pub")? ~ ("async")? ~ ("unsafe")? ~ ("const")? ~ "fn" ~ ident ~ generic_params? ~ "(" ~ fn_params? ~ ")" ~ ("->" ~ type)? ~ where_clause? ~ block_expr
+    | ("pub")? ~ "type" ~ ident ~ "=" ~ type ~ ";"
+    | ("pub")? ~ "const" ~ ident ~ ":" ~ type ~ "=" ~ expr ~ ";"
+}
+
+const_decl = { ("pub")? ~ "const" ~ ident ~ ":" ~ type ~ "=" ~ expr ~ ";" }
+static_decl = { ("pub")? ~ ("mut")? ~ "static" ~ ident ~ ":" ~ type ~ "=" ~ expr ~ ";" }
+
+macro_decl = { ("pub")? ~ "macro" ~ ident ~ "(" ~ macro_param_list? ~ ")" ~ "=>" ~ macro_rules }
+macro_rules_decl = { ("pub")? ~ "macro_rules" ~ "!" ~ ident ~ "{" ~ macro_rules ~ "}" }
+macro_param_list = { macro_param ~ ("," ~ macro_param)* ~ ","? }
+macro_param = { ident ~ ":" ~ macro_fragment_spec }
+macro_fragment_spec = { "expr" | "stmt" | "item" | "type" | "pat" | "path" | "ty" | "ident" | "literal" | "block" | "meta" | "tt" | "vis" }
+macro_rules = { macro_rule ~ (";" ~ macro_rule)* ~ ";"? }
+macro_rule = { "(" ~ token_tree* ~ ")" ~ "=>" ~ "(" ~ token_tree* ~ ")" }
+
+attribute_item = { "#" ~ "[" ~ attribute ~ "]" }
+attribute = { path_expr ~ ("(" ~ meta_item_list? ~ ")")? }
+meta_item_list = { meta_item ~ ("," ~ meta_item)* ~ ","? }
+meta_item = { path_expr | literal | path_expr ~ "=" ~ expr }
+
+// ============================================================================
+// TOP LEVEL
+// ============================================================================
+
+program = { SOI ~ item* ~ EOI }
+
+// ============================================================================
+// WHITESPACE AND COMMENTS
+// ============================================================================
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !("*/") ~ ANY)* ~ "*/" }

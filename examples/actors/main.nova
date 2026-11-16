@@ -1,0 +1,372 @@
+// Actors Example - Distributed Chat System
+// Demonstrates actor-based concurrency in NOVA
+
+use nova_task::actor::{Actor, ActorRef, ActorSystem, Props}
+use nova_task::channel::{channel, bounded, unbounded}
+use nova_collections::{HashMap, Vec}
+use nova_string::{String, ToString}
+use nova_time::{Instant, Duration}
+use nova_sync::{Arc, RwLock}
+use nova_io::{stdin, stdout, Write, BufRead, BufReader}
+use std::collections::hash_map::DefaultHasher
+use std::hash::{Hash, Hasher}
+
+// Message types
+#[derive(Debug, Clone)]
+enum ChatMessage {
+    Join { user: String, reply: ActorRef<ChatMessage> },
+    Leave { user: String },
+    Broadcast { from: String, text: String },
+    Private { from: String, to: String, text: String },
+    ListUsers { reply: ActorRef<ChatMessage> },
+    UsersList { users: Vec<String> },
+    Error { message: String },
+}
+
+// Chat server actor
+struct ChatServer {
+    users: HashMap<String, ActorRef<ChatMessage>>,
+    history: Vec<ChatMessage>,
+    max_history: usize,
+}
+
+impl Actor for ChatServer {
+    type Message = ChatMessage;
+
+    fn handle(&mut self, msg: Self::Message, ctx: &mut ActorContext<Self>) {
+        match msg {
+            ChatMessage::Join { user, reply } => {
+                if self.users.contains_key(&user) {
+                    reply.send(ChatMessage::Error { 
+                        message: format!("User '{}' already exists", user) 
+                    });
+                } else {
+                    self.users.insert(user.clone(), reply.clone());
+                    self.broadcast_system(format!("{} joined the chat", user));
+                    reply.send(ChatMessage::UsersList { 
+                        users: self.users.keys().cloned().collect() 
+                    });
+                    println!("User joined: {}", user);
+                }
+            }
+            
+            ChatMessage::Leave { user } => {
+                if self.users.remove(&user).is_some() {
+                    self.broadcast_system(format!("{} left the chat", user));
+                    println!("User left: {}", user);
+                }
+            }
+            
+            ChatMessage::Broadcast { from, text } => {
+                if self.users.contains_key(&from) {
+                    let msg = ChatMessage::Broadcast { from: from.clone(), text };
+                    self.add_to_history(msg.clone());
+                    self.broadcast_to_all(msg);
+                }
+            }
+            
+            ChatMessage::Private { from, to, text } => {
+                if let Some(recipient) = self.users.get(&to) {
+                    recipient.send(ChatMessage::Private { from, to, text });
+                } else if let Some(sender) = self.users.get(&from) {
+                    sender.send(ChatMessage::Error { 
+                        message: format!("User '{}' not found", to) 
+                    });
+                }
+            }
+            
+            ChatMessage::ListUsers { reply } => {
+                reply.send(ChatMessage::UsersList { 
+                    users: self.users.keys().cloned().collect() 
+                });
+            }
+            
+            _ => {}
+        }
+    }
+}
+
+impl ChatServer {
+    fn new() -> Self {
+        Self {
+            users: HashMap::new(),
+            history: Vec::new(),
+            max_history: 100,
+        }
+    }
+
+    fn broadcast_system(&self, text: String) {
+        let msg = ChatMessage::Broadcast { 
+            from: "System".to_string(), 
+            text 
+        };
+        self.broadcast_to_all(msg);
+    }
+
+    fn broadcast_to_all(&self, msg: ChatMessage) {
+        for (_, user_ref) in &self.users {
+            user_ref.send(msg.clone());
+        }
+    }
+
+    fn add_to_history(&mut self, msg: ChatMessage) {
+        self.history.push(msg);
+        if self.history.len() > self.max_history {
+            self.history.remove(0);
+        }
+    }
+}
+
+// Chat client actor
+struct ChatClient {
+    name: String,
+    server: ActorRef<ChatMessage>,
+    input_tx: std::sync::mpsc::Sender<String>,
+}
+
+impl Actor for ChatClient {
+    type Message = ChatMessage;
+
+    fn handle(&mut self, msg: Self::Message, ctx: &mut ActorContext<Self>) {
+        match msg {
+            ChatMessage::Broadcast { from, text } => {
+                if from != self.name {
+                    println!("[{}] {}", from, text);
+                }
+            }
+            
+            ChatMessage::Private { from, to, text } => {
+                println!("[PM from {}] {}", from, text);
+            }
+            
+            ChatMessage::UsersList { users } => {
+                println!("Online users: {}", users.join(", "));
+            }
+            
+            ChatMessage::Error { message } => {
+                eprintln!("Error: {}", message);
+            }
+            
+            _ => {}
+        }
+    }
+}
+
+// Actor context for sending messages
+struct ActorContext<A: Actor> {
+    self_ref: ActorRef<A::Message>,
+}
+
+impl<A: Actor> ActorContext<A> {
+    fn new(self_ref: ActorRef<A::Message>) -> Self {
+        Self { self_ref }
+    }
+}
+
+// Actor reference
+struct ActorRef<M> {
+    tx: std::sync::mpsc::Sender<M>,
+}
+
+impl<M: Send + 'static> ActorRef<M> {
+    fn send(&self, msg: M) {
+        let _ = self.tx.send(msg);
+    }
+}
+
+// Actor system
+struct ActorSystem {
+    // In a real implementation, this would manage actor lifecycles
+}
+
+impl ActorSystem {
+    fn new() -> Self {
+        Self {}
+    }
+
+    fn spawn<A: Actor + Send + 'static>(&self, actor: A) -> ActorRef<A::Message> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let actor_ref = ActorRef { tx };
+        
+        std::thread::spawn(move || {
+            let mut actor = actor;
+            let mut ctx = ActorContext::new(actor_ref.clone());
+            while let Ok(msg) = rx.recv() {
+                actor.handle(msg, &mut ctx);
+            }
+        });
+        
+        actor_ref
+    }
+}
+
+// Main function
+fn main() {
+    println!("🎭 NOVA Actor System - Chat Demo");
+    println!("=================================\n");
+
+    // Create actor system
+    let system = ActorSystem::new();
+
+    // Spawn chat server
+    let server = system.spawn(ChatServer::new());
+
+    // Spawn clients
+    let alice = spawn_client(&system, "Alice", server.clone());
+    let bob = spawn_client(&system, "Bob", server.clone());
+    let charlie = spawn_client(&system, "Charlie", server.clone());
+
+    // Simulate chat
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Alice sends a message
+    server.send(ChatMessage::Broadcast { 
+        from: "Alice".to_string(), 
+        text: "Hello everyone!".to_string() 
+    });
+
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Bob replies
+    server.send(ChatMessage::Broadcast { 
+        from: "Bob".to_string(), 
+        text: "Hi Alice!".to_string() 
+    });
+
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Private message
+    server.send(ChatMessage::Private { 
+        from: "Alice".to_string(), 
+        to: "Charlie".to_string(), 
+        text: "Hey Charlie, private message!".to_string() 
+    });
+
+    std::thread::sleep(Duration::from_millis(100));
+
+    // List users
+    let (list_tx, list_rx) = std::sync::mpsc::channel();
+    server.send(ChatMessage::ListUsers { reply: ActorRef { tx: list_tx } });
+    
+    if let Ok(ChatMessage::UsersList { users }) = list_rx.recv_timeout(Duration::from_millis(100)) {
+        println!("Current users: {}", users.join(", "));
+    }
+
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Graceful shutdown
+    server.send(ChatMessage::Leave { user: "Alice".to_string() });
+    server.send(ChatMessage::Leave { user: "Bob".to_string() });
+    server.send(ChatMessage::Leave { user: "Charlie".to_string() });
+
+    std::thread::sleep(Duration::from_millis(100));
+    
+    println!("\nChat demo completed!");
+}
+
+fn spawn_client(system: &ActorSystem, name: &str, server: ActorRef<ChatMessage>) -> ActorRef<ChatMessage> {
+    let (input_tx, input_rx) = std::sync::mpsc::channel();
+    
+    let client = system.spawn(ChatClient {
+        name: name.to_string(),
+        server: server.clone(),
+        input_tx,
+    });
+
+    // Simulate user input
+    let server_clone = server.clone();
+    let name_owned = name.to_string();
+    std::thread::spawn(move || {
+        // In a real app, this would read from stdin
+        std::thread::sleep(Duration::from_secs(1));
+        server_clone.send(ChatMessage::Join { 
+            user: name_owned.clone(), 
+            reply: client.clone() 
+        });
+    });
+
+    client
+}
+
+// Additional actor examples
+
+// Worker pool actor
+struct WorkerPool {
+    workers: Vec<ActorRef<WorkerMessage>>,
+    next_worker: usize,
+}
+
+enum WorkerMessage {
+    Task { id: u64, data: Vec<u8>, reply: ActorRef<WorkerMessage> },
+    Result { id: u64, result: Vec<u8> },
+    Shutdown,
+}
+
+impl Actor for WorkerPool {
+    type Message = WorkerMessage;
+
+    fn handle(&mut self, msg: Self::Message, _ctx: &mut ActorContext<Self>) {
+        match msg {
+            WorkerMessage::Task { id, data, reply } => {
+                let worker = &self.workers[self.next_worker];
+                self.next_worker = (self.next_worker + 1) % self.workers.len();
+                worker.send(WorkerMessage::Task { id, data, reply });
+            }
+            _ => {}
+        }
+    }
+}
+
+// Pipeline actor
+struct PipelineStage<In, Out> {
+    processor: Box<dyn Fn(In) -> Out + Send>,
+    next: Option<ActorRef<Out>>,
+}
+
+impl<In: Send + 'static, Out: Send + 'static> Actor for PipelineStage<In, Out> {
+    type Message = In;
+
+    fn handle(&mut self, msg: In, _ctx: &mut ActorContext<Self>) {
+        let out = (self.processor)(msg);
+        if let Some(next) = &self.next {
+            next.send(out);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_actor_system() {
+        let system = ActorSystem::new();
+        let actor = system.spawn(CounterActor::new());
+        
+        let (tx, rx) = std::sync::mpsc::channel();
+        actor.send(CounterMessage::Increment { reply: ActorRef { tx } });
+        
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(CounterMessage::Value(v)) => assert_eq!(v, 1),
+            _ => panic!("Expected value"),
+        }
+    }
+}
+
+struct CounterActor { count: u64 }
+enum CounterMessage { Increment { reply: ActorRef<CounterMessage> }, Value(u64) }
+
+impl Actor for CounterActor {
+    type Message = CounterMessage;
+    fn handle(&mut self, msg: Self::Message, _ctx: &mut ActorContext<Self>) {
+        match msg {
+            CounterMessage::Increment { reply } => {
+                self.count += 1;
+                reply.send(CounterMessage::Value(self.count));
+            }
+            _ => {}
+        }
+    }
+}
+
+impl CounterActor { fn new() -> Self { Self { count: 0 } } }

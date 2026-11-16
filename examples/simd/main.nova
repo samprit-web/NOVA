@@ -1,0 +1,360 @@
+// SIMD Example - High-Performance Vector Operations
+// Demonstrates NOVA's SIMD intrinsics and auto-vectorization
+
+use nova_arch::simd::{
+    f32x4, f32x8, f64x2, f64x4,
+    i32x4, i32x8, i64x2, i64x4,
+    u32x4, u32x8, u64x2, u64x4,
+    Simd, SimdFloat, SimdInt, SimdPartialOrd,
+    LaneCount, SupportedLaneCount,
+}
+use nova_arch::{simd_swizzle, simd_shuffle}
+use nova_time::{Instant, Duration}
+use nova_collections::Vec
+use nova_fmt::println
+
+// Vector types
+type Vec4 = f32x4;
+type Vec8 = f32x8;
+type Mat4 = [Vec4; 4];
+
+// SIMD-optimized vector operations
+fn vec4_add(a: Vec4, b: Vec4) -> Vec4 {
+    a + b
+}
+
+fn vec4_sub(a: Vec4, b: Vec4) -> Vec4 {
+    a - b
+}
+
+fn vec4_mul(a: Vec4, b: Vec4) -> Vec4 {
+    a * b
+}
+
+fn vec4_div(a: Vec4, b: Vec4) -> Vec4 {
+    a / b
+}
+
+fn vec4_dot(a: Vec4, b: Vec4) -> f32 {
+    (a * b).reduce_sum()
+}
+
+fn vec4_length(v: Vec4) -> f32 {
+    vec4_dot(v, v).sqrt()
+}
+
+fn vec4_normalize(v: Vec4) -> Vec4 {
+    let len = vec4_length(v);
+    if len > 0.0 {
+        v / Vec4::splat(len)
+    } else {
+        v
+    }
+}
+
+fn vec4_cross(a: Vec4, b: Vec4) -> Vec4 {
+    // a.yzx * b.zxy - a.zxy * b.yzx
+    let a_yzx = simd_swizzle!(a, [1, 2, 0, 3]);
+    let a_zxy = simd_swizzle!(a, [2, 0, 1, 3]);
+    let b_zxy = simd_swizzle!(b, [2, 0, 1, 3]);
+    let b_yzx = simd_swizzle!(b, [1, 2, 0, 3]);
+    a_yzx * b_zxy - a_zxy * b_yzx
+}
+
+// Matrix operations
+fn mat4_mul(a: &Mat4, b: &Mat4) -> Mat4 {
+    let mut result = [Vec4::splat(0.0); 4];
+    
+    for i in 0..4 {
+        let mut row = Vec4::splat(0.0);
+        for j in 0..4 {
+            let a_row = simd_swizzle!(a[i], [j, j, j, j]);
+            let b_col = Vec4::new(b[0][j], b[1][j], b[2][j], b[3][j]);
+            row += a_row * b_col;
+        }
+        result[i] = row;
+    }
+    
+    result
+}
+
+fn mat4_vec_mul(mat: &Mat4, vec: Vec4) -> Vec4 {
+    let mut result = Vec4::splat(0.0);
+    for i in 0..4 {
+        result += mat[i] * simd_swizzle!(vec, [i, i, i, i]);
+    }
+    result
+}
+
+fn mat4_transpose(mat: &Mat4) -> Mat4 {
+    [
+        Vec4::new(mat[0][0], mat[1][0], mat[2][0], mat[3][0]),
+        Vec4::new(mat[0][1], mat[1][1], mat[2][1], mat[3][1]),
+        Vec4::new(mat[0][2], mat[1][2], mat[2][2], mat[3][2]),
+        Vec4::new(mat[0][3], mat[1][3], mat[2][3], mat[3][3]),
+    ]
+}
+
+// Particle system with SIMD
+struct ParticleSystem {
+    positions: Vec<Vec4>,  // x, y, z, w (w=1 for position)
+    velocities: Vec<Vec4>, // vx, vy, vz, mass
+    forces: Vec<Vec4>,     // fx, fy, fz, 0
+    count: usize,
+}
+
+impl ParticleSystem {
+    fn new(capacity: usize) -> Self {
+        let count = capacity.next_multiple_of(4) / 4; // Process 4 at a time
+        Self {
+            positions: vec![Vec4::splat(0.0); count],
+            velocities: vec![Vec4::splat(0.0); count],
+            forces: vec![Vec4::splat(0.0); count],
+            count: 0,
+        }
+    }
+
+    fn add_particle(&mut self, pos: Vec4, vel: Vec4, mass: f32) -> usize {
+        let idx = self.count;
+        let vec_idx = idx / 4;
+        let lane = idx % 4;
+        
+        if vec_idx >= self.positions.len() {
+            self.positions.push(Vec4::splat(0.0));
+            self.velocities.push(Vec4::splat(0.0));
+            self.forces.push(Vec4::splat(0.0));
+        }
+        
+        // Set lane (simplified - real impl would use scatter)
+        self.positions[vec_idx] = self.positions[vec_idx].replace(lane, pos);
+        self.velocities[vec_idx] = self.velocities[vec_idx].replace(lane, vel);
+        self.forces[vec_idx] = self.forces[vec_idx].replace(lane, Vec4::new(0.0, 0.0, 0.0, mass));
+        
+        self.count += 1;
+        idx
+    }
+
+    fn update(&mut self, dt: f32) {
+        let dt_vec = Vec4::splat(dt);
+        
+        // Process 4 particles at a time
+        for i in 0..self.positions.len() {
+            // v += f/m * dt
+            let mass = simd_swizzle!(self.forces[i], [3, 3, 3, 3]);
+            self.velocities[i] += self.forces[i] / mass * dt_vec;
+            
+            // p += v * dt
+            self.positions[i] += self.velocities[i] * dt_vec;
+            
+            // Clear forces
+            self.forces[i] = Vec4::splat(0.0);
+        }
+    }
+
+    fn apply_gravity(&mut self, gravity: Vec4) {
+        for i in 0..self.positions.len() {
+            let mass = simd_swizzle!(self.forces[i], [3, 3, 3, 3]);
+            self.forces[i] += gravity * mass;
+        }
+    }
+}
+
+// Image processing with SIMD
+fn grayscale_simd(input: &[u8], output: &mut [u8]) {
+    // Process 16 bytes at a time (4 pixels RGBA)
+    let chunks = input.chunks_exact(16);
+    let mut out_chunks = output.chunks_exact_mut(16);
+    
+    for (inp, out) in chunks.zip(out_chunks.by_ref()) {
+        // Load 4 pixels (RGBA each)
+        let pixels = u32x4::from_slice(inp);
+        
+        // Extract R, G, B channels
+        let r = (pixels >> 0) & 0xFF;
+        let g = (pixels >> 8) & 0xFF;
+        let b = (pixels >> 16) & 0xFF;
+        
+        // Gray = 0.299*R + 0.587*G + 0.114*B
+        // Approximate with integer math: (77*R + 150*G + 29*B) >> 8
+        let gray = (r * 77 + g * 150 + b * 29) >> 8;
+        
+        // Pack back to RGBA
+        let result = (gray << 16) | (gray << 8) | gray | (pixels & 0xFF000000);
+        result.write_to_slice(out);
+    }
+}
+
+// Audio processing with SIMD
+fn apply_gain_simd(samples: &mut [f32], gain: f32) {
+    let gain_vec = f32x4::splat(gain);
+    let chunks = samples.chunks_exact_mut(4);
+    
+    for chunk in chunks {
+        let sample_vec = f32x4::from_slice(chunk);
+        (sample_vec * gain_vec).write_to_slice(chunk);
+    }
+}
+
+// FFT-like butterfly operation
+fn butterfly_simd(a: &mut [f32], b: &mut [f32], cos: f32, sin: f32) {
+    let cos_vec = f32x4::splat(cos);
+    let sin_vec = f32x4::splat(sin);
+    
+    for (a_chunk, b_chunk) in a.chunks_exact_mut(4).zip(b.chunks_exact_mut(4)) {
+        let a_vec = f32x4::from_slice(a_chunk);
+        let b_vec = f32x4::from_slice(b_chunk);
+        
+        // Butterfly: a' = a + b * w, b' = a - b * w
+        // w = cos + i*sin
+        let b_real = b_vec * cos_vec;
+        let b_imag = b_vec * sin_vec;
+        
+        let new_a = a_vec + b_real;
+        let new_b = a_vec - b_real;
+        
+        new_a.write_to_slice(a_chunk);
+        new_b.write_to_slice(b_chunk);
+    }
+}
+
+// Benchmark
+fn benchmark(name: &str, f: impl FnOnce()) -> Duration {
+    let start = Instant::now();
+    f();
+    start.elapsed()
+}
+
+fn main() {
+    println!("⚡ NOVA SIMD Examples");
+    println!("=====================\n");
+
+    // Basic vector ops
+    println!("📐 Basic Vector Operations:");
+    let a = Vec4::new(1.0, 2.0, 3.0, 4.0);
+    let b = Vec4::new(5.0, 6.0, 7.0, 8.0);
+    
+    println!("  a = {:?}", a.to_array());
+    println!("  b = {:?}", b.to_array());
+    println!("  a + b = {:?}", vec4_add(a, b).to_array());
+    println!("  a - b = {:?}", vec4_sub(a, b).to_array());
+    println!("  a * b = {:?}", vec4_mul(a, b).to_array());
+    println!("  dot(a, b) = {}", vec4_dot(a, b));
+    println!("  |a| = {}", vec4_length(a));
+    println!("  normalize(a) = {:?}", vec4_normalize(a).to_array());
+    println!("  cross(a, b) = {:?}", vec4_cross(a, b).to_array());
+
+    // Matrix operations
+    println!("\n📊 Matrix Operations:");
+    let mat_a: Mat4 = [
+        Vec4::new(1.0, 2.0, 3.0, 4.0),
+        Vec4::new(5.0, 6.0, 7.0, 8.0),
+        Vec4::new(9.0, 10.0, 11.0, 12.0),
+        Vec4::new(13.0, 14.0, 15.0, 16.0),
+    ];
+    let mat_b: Mat4 = [
+        Vec4::new(1.0, 0.0, 0.0, 0.0),
+        Vec4::new(0.0, 1.0, 0.0, 0.0),
+        Vec4::new(0.0, 0.0, 1.0, 0.0),
+        Vec4::new(0.0, 0.0, 0.0, 1.0),
+    ];
+    
+    let mat_c = mat4_mul(&mat_a, &mat_b);
+    println!("  A * I = A: {:?}", mat_c[0].to_array());
+
+    let vec = Vec4::new(1.0, 2.0, 3.0, 4.0);
+    let transformed = mat4_vec_mul(&mat_a, vec);
+    println!("  M * v = {:?}", transformed.to_array());
+
+    // Particle system
+    println!("\n🎯 Particle System (SIMD):");
+    let mut particles = ParticleSystem::new(1000);
+    
+    for i in 0..1000 {
+        let pos = Vec4::new(
+            rand::random::<f32>() * 100.0,
+            rand::random::<f32>() * 100.0,
+            rand::random::<f32>() * 100.0,
+            1.0,
+        );
+        let vel = Vec4::new(
+            rand::random::<f32>() * 10.0 - 5.0,
+            rand::random::<f32>() * 10.0 - 5.0,
+            rand::random::<f32>() * 10.0 - 5.0,
+            1.0,
+        );
+        particles.add_particle(pos, vel, 1.0);
+    }
+    
+    let gravity = Vec4::new(0.0, -9.81, 0.0, 0.0);
+    particles.apply_gravity(gravity);
+    
+    let elapsed = benchmark("Particle update (1000 particles, 60 frames)", || {
+        for _ in 0..60 {
+            particles.update(1.0 / 60.0);
+        }
+    });
+    println!("  60 frames: {:.2}ms ({:.0} particles/ms)", 
+             elapsed.as_secs_f32() * 1000.0, 
+             1000.0 * 60.0 / (elapsed.as_secs_f32() * 1000.0));
+
+    // Image processing
+    println!("\n🖼️  Image Processing (Grayscale):");
+    let width = 1920;
+    let height = 1080;
+    let mut rgba = vec![0u8; width * height * 4];
+    
+    // Fill with test pattern
+    for y in 0..height {
+        for x in 0..width {
+            let idx = (y * width + x) * 4;
+            rgba[idx] = (x * 255 / width) as u8;     // R
+            rgba[idx + 1] = (y * 255 / height) as u8; // G
+            rgba[idx + 2] = 128;                      // B
+            rgba[idx + 3] = 255;                      // A
+        }
+    }
+    
+    let mut gray = vec![0u8; rgba.len()];
+    let elapsed = benchmark("Grayscale 1920x1080", || {
+        grayscale_simd(&rgba, &mut gray);
+    });
+    println!("  Time: {:.2}ms ({:.0} MP/s)", 
+             elapsed.as_secs_f32() * 1000.0,
+             (width * height) as f32 / 1_000_000.0 / elapsed.as_secs_f32());
+
+    // Audio processing
+    println!("\n🔊 Audio Processing (Gain):");
+    let mut audio = vec![0.5f32; 48000 * 10]; // 10 seconds at 48kHz
+    let elapsed = benchmark("Apply gain to 10s audio", || {
+        apply_gain_simd(&mut audio, 0.5);
+    });
+    println!("  Time: {:.2}ms ({:.0} Msamples/s)", 
+             elapsed.as_secs_f32() * 1000.0,
+             audio.len() as f32 / 1_000_000.0 / elapsed.as_secs_f32());
+
+    // Benchmark: scalar vs SIMD
+    println!("\n📈 Scalar vs SIMD Benchmark:");
+    let size = 1_000_000;
+    let mut scalar_data = vec![1.0f32; size];
+    let mut simd_data = vec![1.0f32; size];
+    
+    let scalar_time = benchmark("Scalar multiply", || {
+        for x in &mut scalar_data {
+            *x *= 2.0;
+        }
+    });
+    
+    let simd_time = benchmark("SIMD multiply (f32x4)", || {
+        let chunks = simd_data.chunks_exact_mut(4);
+        for chunk in chunks {
+            let vec = f32x4::from_slice(chunk);
+            (vec * f32x4::splat(2.0)).write_to_slice(chunk);
+        }
+    });
+    
+    println!("  Scalar: {:.2}ms", scalar_time.as_secs_f32() * 1000.0);
+    println!("  SIMD:   {:.2}ms", simd_time.as_secs_f32() * 1000.0);
+    println!("  Speedup: {:.2}x", scalar_time.as_secs_f32() / simd_time.as_secs_f32());
+
+    println!("\n✅ All SIMD examples completed!");
+}

@@ -1,0 +1,105 @@
+[package]
+name = "nova-std"
+version = "1.0.0"
+edition = "2021"
+description = "NOVA Standard Library"
+authors = ["NOVA Core Team <core@nova-lang.org>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/samprit-web/NOVA"
+
+[dependencies]
+# Core
+nova-compiler = { path = "../compiler", features = ["full"] }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+crossbeam = { workspace = true }
+once_cell = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Collections
+hashbrown = "0.14"
+indexmap = "2.0"
+smallvec = "1.10"
+slab = "0.4"
+
+# Async
+tokio = { workspace = true, features = ["full"] }
+async-std = { workspace = true, features = ["attributes"] }
+futures = { workspace = true }
+
+# IO
+async-compression = "0.4"
+
+# Time
+chrono = { workspace = true }
+
+# Random
+rand = { workspace = true }
+getrandom = { workspace = true }
+
+# Crypto
+sha2 = { workspace = true }
+blake3 = { workspace = true }
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+ed25519-dalek = "2.0"
+x25519-dalek = "2.0"
+rsa = "0.9"
+pem = "1.0"
+der = "0.7"
+x509-parser = "0.16"
+rustls = { version = "0.23", features = ["std", "tls12", "tls13", "quic"] }
+ring = "0.17"
+webpki = "0.22"
+
+# Networking
+hyper = { workspace = true }
+reqwest = { workspace = true }
+axum = { workspace = true }
+async-tungstenite = "0.24"
+tokio-tungstenite = "0.24"
+
+# Serialization
+bincode = { workspace = true }
+msgpack = { workspace = true }
+toml = { workspace = true }
+serde_yaml = { workspace = true }
+
+# File system
+walkdir = { workspace = true }
+glob = { workspace = true }
+tempfile = { workspace = true }
+notify = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+url = { workspace = true }
+percent-encoding = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }
+mime = { workspace = true }
+mime_guess = { workspace = true }
+
+# Regex
+regex = "1.10"
+fancy-regex = "0.12"
+
+# Math
+num-traits = "0.2"
+num-complex = "0.4"
+nalgebra = "0.32"
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+alloc = []

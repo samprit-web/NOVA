@@ -1,0 +1,130 @@
+// Web Server Example
+// Demonstrates async HTTP server with NOVA
+
+use nova_http::{Server, Request, Response, StatusCode}
+use nova_task::{spawn, sleep}
+use nova_time::Duration
+use std::collections::HashMap
+use std::sync::Arc
+use nova_sync::RwLock
+
+// Shared state
+struct AppState {
+    visits: Arc<RwLock<u64>>,
+    messages: Arc<RwLock<Vec<String>>>,
+}
+
+fn main() {
+    let state = Arc::new(AppState {
+        visits: Arc::new(RwLock::new(0)),
+        messages: Arc::new(RwLock::new(Vec::new())),
+    });
+
+    let mut server = Server::new("0.0.0.0:8080");
+
+    // Routes
+    server.get("/", handle_root);
+    server.get("/health", handle_health);
+    server.get("/visits", move |req| handle_visits(req, state.visits.clone()));
+    server.post("/messages", move |req| handle_post_message(req, state.messages.clone()));
+    server.get("/messages", move |req| handle_get_messages(req, state.messages.clone()));
+    
+    // WebSocket
+    server.ws("/ws", handle_websocket);
+
+    println!("🚀 Server starting on http://0.0.0.0:8080");
+    println!("  GET  /          - Hello world");
+    println!("  GET  /health    - Health check");
+    println!("  GET  /visits    - Visit counter");
+    println!("  POST /messages  - Add message");
+    println!("  GET  /messages  - List messages");
+    println!("  WS   /ws        - WebSocket echo");
+
+    server.run().unwrap();
+}
+
+async fn handle_root(_req: Request) -> Response {
+    Response::html(r#"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>NOVA Web Server</title>
+            <style>
+                body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+                .endpoint { background: #f5f5f5; padding: 1rem; margin: 1rem 0; border-radius: 4px; }
+                code { background: #e0e0e0; padding: 0.2rem 0.4rem; border-radius: 3px; }
+            </style>
+        </head>
+        <body>
+            <h1>🚀 NOVA Web Server</h1>
+            <p>Welcome to the NOVA programming language web server example!</p>
+            
+            <h2>Endpoints</h2>
+            <div class="endpoint"><code>GET /</code> - This page</div>
+            <div class="endpoint"><code>GET /health</code> - Health check</div>
+            <div class="endpoint"><code>GET /visits</code> - Visit counter</div>
+            <div class="endpoint"><code>POST /messages</code> - Add message (JSON: {"text": "hello"})</div>
+            <div class="endpoint"><code>GET /messages</code> - List messages</div>
+            <div class="endpoint"><code>WS /ws</code> - WebSocket echo</div>
+            
+            <h2>Try it</h2>
+            <button onclick="fetch('/visits').then(r => r.json()).then(d => alert('Visits: ' + d.visits))">
+                Check Visits
+            </button>
+            <button onclick="fetch('/messages', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: 'Hello from browser!'})}).then(r => r.json()).then(d => alert('Message added!'))">
+                Add Message
+            </button>
+        </body>
+        </html>
+    "#)
+}
+
+async fn handle_health(_req: Request) -> Response {
+    Response::json(&serde_json::json!({
+        "status": "healthy",
+        "version": env!("CARGO_PKG_VERSION"),
+    }))
+}
+
+async fn handle_visits(req: Request, visits: Arc<RwLock<u64>>) -> Response {
+    let mut count = visits.write().await;
+    *count += 1;
+    Response::json(&serde_json::json!({ "visits": *count }))
+}
+
+async fn handle_post_message(req: Request, messages: Arc<RwLock<Vec<String>>>) -> Response {
+    let body = req.body_json().await.unwrap_or_default();
+    let text = body.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    
+    if text.is_empty() {
+        return Response::json(&serde_json::json!({ "error": "Missing 'text' field" })).with_status(StatusCode::BadRequest);
+    }
+    
+    messages.write().await.push(text.clone());
+    Response::json(&serde_json::json!({ "message": text, "status": "added" }))
+}
+
+async fn handle_get_messages(_req: Request, messages: Arc<RwLock<Vec<String>>>) -> Response {
+    let msgs = messages.read().await;
+    Response::json(&serde_json::json!({ "messages": *msgs }))
+}
+
+async fn handle_websocket(mut ws: nova_http::WebSocket) -> Result<(), nova_http::Error> {
+    while let Some(msg) = ws.next().await {
+        match msg {
+            Ok(nova_http::WsMessage::Text(text)) => {
+                ws.send(nova_http::WsMessage::Text(format!("Echo: {}", text))).await?;
+            }
+            Ok(nova_http::WsMessage::Binary(data)) => {
+                ws.send(nova_http::WsMessage::Binary(data)).await?;
+            }
+            Ok(nova_http::WsMessage::Close(_)) => break,
+            Err(e) => {
+                eprintln!("WebSocket error: {}", e);
+                break;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}

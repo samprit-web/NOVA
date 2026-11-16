@@ -1,0 +1,130 @@
+[workspace]
+resolver = "2"
+members = [
+    "compiler",
+    "stdlib",
+    "pkg",
+    "cli",
+    "lsp",
+    "debugger",
+    "vm",
+]
+exclude = ["vscode", "examples", "tests", "docs", "ci", "scripts"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/samprit-web/NOVA"
+homepage = "https://nova-lang.org"
+documentation = "https://docs.nova-lang.org"
+authors = ["NOVA Core Team <core@nova-lang.org>"]
+description = "NOVA Programming Language - Fast, Safe, Universal"
+
+[workspace.dependencies]
+# Core
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = { version = "0.1", features = ["std"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+parking_lot = "0.12"
+crossbeam = "0.8"
+once_cell = "1.18"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+toml_edit = "0.22"
+bincode = "1.3"
+msgpack = "0.8"
+
+# CLI
+clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4.4"
+console = "0.15"
+indicatif = "0.17"
+colored = "2.0"
+termcolor = "1.2"
+
+# Async
+tokio = { version = "1.30", features = ["full", "tracing"] }
+async-std = { version = "1.12", features = ["attributes", "unstable"] }
+futures = "0.3"
+futures-lite = "2.2"
+
+# HTTP
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "cookies", "gzip", "brotli", "multipart", "stream"] }
+hyper = { version = "1.0", features = ["full", "runtime"] }
+axum = { version = "0.7", features = ["macros", "json", "multipart", "ws", "compression"] }
+
+# Parsing
+nom = "7.1"
+pest = { version = "2.7", features = ["serde"] }
+pest_derive = "2.7"
+lalrpop = "0.22"
+lalrpop-util = "0.22"
+
+# Compilation
+inkwell = { version = "0.1", features = ["llvm17-0"] }
+cranelift = { version = "0.96", features = ["default"] }
+cranelift-codegen = { version = "0.96", features = ["default"] }
+cranelift-wasm = { version = "0.96", features = ["default"] }
+wasmtime = { version = "19.0", features = ["cranelift", "jit", "parallel-compilation", "wasm-component-model"] }
+wasmparser = "0.200"
+wasm-encoder = "0.200"
+
+# LSP
+tower-lsp = { version = "0.20", features = ["lsf"] }
+lsp-types = "0.94"
+url = "2.4"
+
+# Testing
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.0"
+pretty_assertions = "1.4"
+instanta = "0.1"
+trybuild = "1.0"
+
+# Misc
+uuid = { version = "1.4", features = ["v4", "v7", "serde", "fast-rng"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+rand = { version = "0.8", features = ["std", "small_rng"] }
+getrandom = "0.2"
+sha2 = "0.10"
+blake3 = "1.5"
+hex = "0.4"
+base64 = "0.21"
+percent-encoding = "2.3"
+urlencoding = "2.1"
+mime = "0.3"
+mime_guess = "2.0"
+walkdir = "2.4"
+glob = "0.3"
+tempfile = "3.8"
+which = "5.0"
+directories = "5.0"
+notify = { version = "6.1", features = ["tokio"] }
+ignore = "0.12"
+
+[workspace.dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.0"
+pretty_assertions = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+opt-level = 3
+lto = "fat"
+debug = true
+
+[profile.test]
+opt-level = 2
+debug = true

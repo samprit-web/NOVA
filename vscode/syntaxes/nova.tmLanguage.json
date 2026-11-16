@@ -1,0 +1,248 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "NOVA",
+  "scopeName": "source.nova",
+  "fileTypes": ["nova"],
+  "injectionSelector": "L:source.nova - string - comment",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#attributes" },
+    { "include": "#macros" },
+    { "include": "#strings" },
+    { "include": "#characters" },
+    { "include": "#numbers" },
+    { "include": "#types" },
+    { "include": "#functions" },
+    { "include": "#operators" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.nova",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.nova",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            { "include": "#comments" }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nova",
+          "match": "\\b(if|else|match|loop|while|for|break|continue|return|yield|try|catch|throw|async|await|spawn)\\b"
+        },
+        {
+          "name": "keyword.declaration.nova",
+          "match": "\\b(fn|struct|enum|trait|impl|mod|type|const|static|let|mut|ref|box|async|const|unsafe|extern|crate|use|as|pub|where)\\b"
+        },
+        {
+          "name": "keyword.operator.nova",
+          "match": "\\b(and|or|not|in|is|as|move|copy|drop|sizeof|alignof|offsetof|typeof|transmute)\\b"
+        },
+        {
+          "name": "keyword.other.nova",
+          "match": "\\b(Self|self|super|true|false|None|Some|Ok|Err|Result|Option|Box|Rc|Arc|Vec|String|HashMap|HashSet)\\b"
+        }
+      ]
+    },
+    "attributes": {
+      "name": "meta.attribute.nova",
+      "begin": "#\\[",
+      "end": "\\]",
+      "patterns": [
+        { "include": "#attribute-inner" }
+      ]
+    },
+    "attribute-inner": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.nova",
+          "match": "\\w+"
+        },
+        {
+          "name": "punctuation.definition.attribute.nova",
+          "match": "="
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        }
+      ]
+    },
+    "macros": {
+      "patterns": [
+        {
+          "name": "meta.macro.nova",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)!\\s*(?:\\(|\\[|\\{)"
+        },
+        {
+          "name": "meta.macro.nova",
+          "match": "\\b(macro_rules!)\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*\\{"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.nova",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#escape-sequences" },
+            { "include": "#interpolation" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.raw.nova",
+          "begin": "r#*\"",
+          "end": "\"#*",
+          "patterns": []
+        },
+        {
+          "name": "string.quoted.double.byte.nova",
+          "begin": "b\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#escape-sequences" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.raw.byte.nova",
+          "begin": "br#*\"",
+          "end": "\"#*",
+          "patterns": []
+        }
+      ]
+    },
+    "escape-sequences": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.nova",
+          "match": "\\\\(?:[nrt\\\\\"'0]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\})"
+        }
+      ]
+    },
+    "interpolation": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.interpolation.begin.nova",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.definition.interpolation.end.nova",
+          "match": "\\}"
+        },
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "characters": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.nova",
+          "match": "'(?:\\\\(?:[nrt\\\\\"'0]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\})|[^'\\\\])'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.nova",
+          "match": "\\b(?:\\d+\\.\\d*|\\d+\\.|\\.\\d+)(?:[eE][+-]?\\d+)?(?:f32|f64|f16|f128)?\\b"
+        },
+        {
+          "name": "constant.numeric.hex.nova",
+          "match": "\\b0x[0-9a-fA-F_]+(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)?\\b"
+        },
+        {
+          "name": "constant.numeric.octal.nova",
+          "match": "\\b0o[0-7_]+(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)?\\b"
+        },
+        {
+          "name": "constant.numeric.binary.nova",
+          "match": "\\b0b[01_]+(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.nova",
+          "match": "\\b\\d+(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)?\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.nova",
+          "match": "\\b(i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f16|f32|f64|f128|bool|char|str|Never|\\!)\\b"
+        },
+        {
+          "name": "storage.type.generic.nova",
+          "match": "\\b(Vec|Option|Result|Box|Rc|Arc|HashMap|HashSet|BTreeMap|BTreeSet|VecDeque|String|&|&mut|Box|RefCell|Cell|Mutex|RwLock|Pin)\\b"
+        },
+        {
+          "name": "storage.type.user.nova",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.nova",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.nova",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.comparison.nova",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.logical.nova",
+          "match": "(&&|\\|\\||!)"
+        },
+        {
+          "name": "keyword.operator.bitwise.nova",
+          "match": "(&|\\||\\^|<<|>>)"
+        },
+        {
+          "name": "keyword.operator.assignment.nova",
+          "match": "(=|\\+=|\\-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=)"
+        },
+        {
+          "name": "keyword.operator.other.nova",
+          "match": "(\\.\\.\\.?|->|=>|::|\\?|\\.|,|;|:)"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.parameter.nova",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        },
+        {
+          "name": "variable.other.nova",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

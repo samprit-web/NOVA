@@ -1,0 +1,382 @@
+{
+  "hello": {
+    "prefix": "hello",
+    "description": "Hello World program",
+    "body": [
+      "fn main() {",
+      "    println!(\"Hello, NOVA! 🚀\")",
+      "}"
+    ]
+  },
+  "main": {
+    "prefix": "main",
+    "description": "Main function",
+    "body": [
+      "fn main() {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "fn": {
+    "prefix": "fn",
+    "description": "Function definition",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "async-fn": {
+    "prefix": "afn",
+    "description": "Async function definition",
+    "body": [
+      "async fn ${1:name}(${2:params}) -> ${3:ReturnType} {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "struct": {
+    "prefix": "struct",
+    "description": "Struct definition",
+    "body": [
+      "struct ${1:Name} {",
+      "    ${2:field}: ${3:Type},",
+      "}"
+    ]
+  },
+  "struct-derive": {
+    "prefix": "sderive",
+    "description": "Struct with derives",
+    "body": [
+      "#[derive(Debug, Clone, PartialEq)]",
+      "struct ${1:Name} {",
+      "    ${2:field}: ${3:Type},",
+      "}"
+    ]
+  },
+  "enum": {
+    "prefix": "enum",
+    "description": "Enum definition",
+    "body": [
+      "enum ${1:Name} {",
+      "    ${2:Variant},",
+      "    ${3:Variant(${4:Type})},",
+      "    ${5:Variant { ${6:field}: ${7:Type} }},",
+      "}"
+    ]
+  },
+  "trait": {
+    "prefix": "trait",
+    "description": "Trait definition",
+    "body": [
+      "trait ${1:Name} {",
+      "    fn ${2:method}(${3:params}) -> ${4:ReturnType};",
+      "}"
+    ]
+  },
+  "impl": {
+    "prefix": "impl",
+    "description": "Impl block",
+    "body": [
+      "impl ${1:Trait} for ${2:Type} {",
+      "    fn ${3:method}(${4:params}) -> ${5:ReturnType} {",
+      "        ${0}",
+      "    }",
+      "}"
+    ]
+  },
+  "match": {
+    "prefix": "match",
+    "description": "Match expression",
+    "body": [
+      "match ${1:expr} {",
+      "    ${2:Pattern} => ${3:expr},",
+      "    _ => ${4:expr},",
+      "}"
+    ]
+  },
+  "if": {
+    "prefix": "if",
+    "description": "If expression",
+    "body": [
+      "if ${1:condition} {",
+      "    ${2:then}",
+      "} else {",
+      "    ${3:else}",
+      "}"
+    ]
+  },
+  "let": {
+    "prefix": "let",
+    "description": "Let binding",
+    "body": [
+      "let ${1:name} = ${2:expr};"
+    ]
+  },
+  "let-mut": {
+    "prefix": "letm",
+    "description": "Mutable let binding",
+    "body": [
+      "let mut ${1:name} = ${2:expr};"
+    ]
+  },
+  "const": {
+    "prefix": "const",
+    "description": "Constant definition",
+    "body": [
+      "const ${1:NAME}: ${2:Type} = ${3:expr};"
+    ]
+  },
+  "loop": {
+    "prefix": "loop",
+    "description": "Infinite loop",
+    "body": [
+      "loop {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "while": {
+    "prefix": "while",
+    "description": "While loop",
+    "body": [
+      "while ${1:condition} {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "for": {
+    "prefix": "for",
+    "description": "For loop",
+    "body": [
+      "for ${1:item} in ${2:iterable} {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "try": {
+    "prefix": "try",
+    "description": "Try block",
+    "body": [
+      "try {",
+      "    ${1:expr}",
+      "} catch (${2:pattern}) {",
+      "    ${3:handler}",
+      "}"
+    ]
+  },
+  "spawn": {
+    "prefix": "spawn",
+    "description": "Spawn async task",
+    "body": [
+      "spawn async {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "actor": {
+    "prefix": "actor",
+    "description": "Actor definition",
+    "body": [
+      "actor ${1:Name} {",
+      "    ${2:field}: ${3:Type} = ${4:default},",
+      "",
+      "    fn ${5:method}(&mut self) -> ${6:ReturnType} {",
+      "        ${0}",
+      "    }",
+      "}"
+    ]
+  },
+  "channel": {
+    "prefix": "chan",
+    "description": "Channel creation",
+    "body": [
+      "let (tx, rx) = channel::bounded::<${1:Type}>(${2:capacity});"
+    ]
+  },
+  "select": {
+    "prefix": "select",
+    "description": "Select statement",
+    "body": [
+      "select! {",
+      "    ${1:msg} = ${2:rx}.recv() => {",
+      "        ${3:handler}",
+      "    }",
+      "    ${4:_} = ${5:timeout} => {",
+      "        ${6:handler}",
+      "    }",
+      "}"
+    ]
+  },
+  "vec": {
+    "prefix": "vec",
+    "description": "Vec macro",
+    "body": [
+      "vec![${1:expr}${2:, ${3:expr}}]"
+    ]
+  },
+  "hashmap": {
+    "prefix": "hm",
+    "description": "HashMap macro",
+    "body": [
+      "hashmap!{",
+      "    ${1:key} => ${2:value},",
+      "    ${3:key} => ${4:value},",
+      "}"
+    ]
+  },
+  "println": {
+    "prefix": "pln",
+    "description": "Println macro",
+    "body": [
+      "println!(\"${1:message}\");"
+    ]
+  },
+  "format": {
+    "prefix": "fmt",
+    "description": "Format string",
+    "body": [
+      "format!(\"${1:message}\"${2:, ${3:args}})"
+    ]
+  },
+  "unwrap": {
+    "prefix": "unwrap",
+    "description": "Unwrap result/option",
+    "body": [
+      "${1:expr}.unwrap()"
+    ]
+  },
+  "expect": {
+    "prefix": "expect",
+    "description": "Expect with message",
+    "body": [
+      "${1:expr}.expect(\"${2:message}\")"
+    ]
+  },
+  "question": {
+    "prefix": "?",
+    "description": "Try operator",
+    "body": [
+      "${1:expr}?"
+    ]
+  },
+  "todo": {
+    "prefix": "todo",
+    "description": "Todo macro",
+    "body": [
+      "todo!(\"${1:message}\")"
+    ]
+  },
+  "unimplemented": {
+    "prefix": "unimp",
+    "description": "Unimplemented macro",
+    "body": [
+      "unimplemented!(\"${1:message}\")"
+    ]
+  },
+  "test": {
+    "prefix": "test",
+    "description": "Test function",
+    "body": [
+      "#[test]",
+      "fn ${1:test_name}() {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "bench": {
+    "prefix": "bench",
+    "description": "Benchmark function",
+    "body": [
+      "#[bench]",
+      "fn ${1:bench_name}(b: &mut Bencher) {",
+      "    b.iter(|| {",
+      "        ${0}",
+      "    });",
+      "}"
+    ]
+  },
+  "module": {
+    "prefix": "mod",
+    "description": "Module declaration",
+    "body": [
+      "mod ${1:name} {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "use": {
+    "prefix": "use",
+    "description": "Use declaration",
+    "body": [
+      "use ${1:path};"
+    ]
+  },
+  "async-block": {
+    "prefix": "async",
+    "description": "Async block",
+    "body": [
+      "async {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "closure": {
+    "prefix": "closure",
+    "description": "Closure",
+    "body": [
+      "|${1:params}| {",
+      "    ${0}",
+      "}"
+    ]
+  },
+  "ref": {
+    "prefix": "ref",
+    "description": "Reference",
+    "body": [
+      "&${1:expr}"
+    ]
+  },
+  "ref-mut": {
+    "prefix": "refm",
+    "description": "Mutable reference",
+    "body": [
+      "&mut ${1:expr}"
+    ]
+  },
+  "box": {
+    "prefix": "box",
+    "description": "Box allocation",
+    "body": [
+      "Box::new(${1:expr})"
+    ]
+  },
+  "rc": {
+    "prefix": "rc",
+    "description": "Rc allocation",
+    "body": [
+      "Rc::new(${1:expr})"
+    ]
+  },
+  "arc": {
+    "prefix": "arc",
+    "description": "Arc allocation",
+    "body": [
+      "Arc::new(${1:expr})"
+    ]
+  },
+  "mutex": {
+    "prefix": "mutex",
+    "description": "Mutex",
+    "body": [
+      "Mutex::new(${1:expr})"
+    ]
+  },
+  "rwlock": {
+    "prefix": "rwlock",
+    "description": "RwLock",
+    "body": [
+      "RwLock::new(${1:expr})"
+    ]
+  }
+}
