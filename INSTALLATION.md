@@ -11,23 +11,30 @@
 
 #### Linux/macOS/WSL
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://nova-lang.org/install.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/samprit-web/NOVA/main/scripts/install.sh | sh
 ```
 
 #### Windows (PowerShell)
 ```powershell
-irm https://nova-lang.org/install.ps1 | iex
+irm https://raw.githubusercontent.com/samprit-web/NOVA/main/scripts/install.ps1 | iex
 ```
 
-#### Homebrew (macOS/Linux)
+#### Homebrew (macOS/Linux) - When Available
 ```bash
-brew install nova-lang
+# brew install nova-lang
 ```
 
-#### Docker
+#### Docker - When Available
 ```bash
-docker pull nova-lang/nova:latest
-docker run -it --rm -v $(pwd):/workspace nova-lang/nova:latest
+# docker pull nova-lang/nova:latest
+# docker run -it --rm -v $(pwd):/workspace nova-lang/nova:latest
+```
+
+#### Build from Source (Always Works)
+```bash
+git clone https://github.com/samprit-web/NOVA.git
+cd NOVA
+cargo build --workspace --release
 ```
 
 ---
@@ -220,16 +227,15 @@ export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 ```
 
 ### Getting Help
-- **Documentation**: https://docs.nova-lang.org
-- **Discord**: https://discord.gg/nova-lang
+- **Documentation**: https://github.com/samprit-web/NOVA/tree/main/docs
 - **GitHub Issues**: https://github.com/samprit-web/NOVA/issues
-- **Forum**: https://forum.nova-lang.org
+- **GitHub Discussions**: https://github.com/samprit-web/NOVA/discussions
 
 ---
 
 ## Next Steps
 
-1. Read the [Language Guide](https://docs.nova-lang.org/guide)
+1. Read the [Language Guide](https://github.com/samprit-web/NOVA/tree/main/docs/guide.md)
 2. Try the [Examples](../examples/)
-3. Read the [Standard Library Docs](https://docs.nova-lang.org/std)
+3. Read the [Standard Library Docs](https://github.com/samprit-web/NOVA/tree/main/docs/std.md)
 4. Join the community!

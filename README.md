@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/samprit-web/NOVA/workflows/CI/badge.svg)](https://github.com/samprit-web/NOVA/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://docs.nova-lang.org)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://github.com/samprit-web/NOVA/tree/main/docs)
 
 **NOVA** — *New Order Velocity Architecture*
 
@@ -28,16 +28,21 @@ A next-generation systems programming language that is **fast**, **safe**, and *
 
 ```bash
 # Linux / macOS / WSL
-curl --proto '=https' --tlsv1.2 -sSf https://nova-lang.org/install.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/samprit-web/NOVA/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
-irm https://nova-lang.org/install.ps1 | iex
+irm https://raw.githubusercontent.com/samprit-web/NOVA/main/scripts/install.ps1 | iex
 
-# Homebrew
-brew install nova-lang
+# Homebrew (when available)
+# brew install nova-lang
 
-# Docker
-docker pull nova-lang/nova:latest
+# Docker (when available)
+# docker pull nova-lang/nova:latest
+
+# Build from source
+git clone https://github.com/samprit-web/NOVA.git
+cd NOVA
+cargo build --workspace --release
 ```
 
 ### Hello World
@@ -64,9 +69,9 @@ nova run
 
 ## 📚 Documentation
 
-- [Language Guide](https://docs.nova-lang.org/guide)
-- [Standard Library](https://docs.nova-lang.org/std)
-- [Reference](https://docs.nova-lang.org/reference)
+- [Language Guide](https://github.com/samprit-web/NOVA/tree/main/docs/guide.md)
+- [Standard Library](https://github.com/samprit-web/NOVA/tree/main/docs/std.md)
+- [Reference](https://github.com/samprit-web/NOVA/tree/main/docs/reference.md)
 - [Whitepaper](WHITEPAPER.md)
 - [RFCs](https://github.com/samprit-web/NOVA/tree/main/docs/rfcs)
 
@@ -275,8 +280,7 @@ panic = "abort"
 ## 🤝 Community
 
 - **GitHub**: https://github.com/samprit-web/NOVA
-- **Discord**: https://discord.gg/nova-lang
-- **Forum**: https://forum.nova-lang.org
+- **Issues & Discussions**: https://github.com/samprit-web/NOVA/issues
 - **Twitter**: @nova_lang
 
 ## 📄 License

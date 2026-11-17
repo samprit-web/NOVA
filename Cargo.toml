@@ -12,8 +12,8 @@ version = "1.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/samprit-web/NOVA"
-homepage = "https://nova-lang.org"
-documentation = "https://docs.nova-lang.org"
+homepage = "https://github.com/samprit-web/NOVA"
+documentation = "https://github.com/samprit-web/NOVA/tree/main/docs"
 authors = ["NOVA Core Team <core@nova-lang.org>"]
 description = "NOVA Programming Language - Fast, Safe, Universal"
 

@@ -610,9 +610,9 @@ version = "1.0.0"
 edition = "2026"
 description = "A NOVA application"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/user/my-app"
-homepage = "https://my-app.nova-lang.org"
-documentation = "https://docs.rs/my-app"
+repository = "https://github.com/samprit-web/NOVA"
+homepage = "https://github.com/samprit-web/NOVA"
+documentation = "https://github.com/samprit-web/NOVA/tree/main/docs"
 keywords = ["web", "async", "api"]
 categories = ["web-programming", "asynchronous"]
 
@@ -996,10 +996,10 @@ spawn_blocking(|| { ... })     // CPU-bound on thread pool
 
 ```bash
 # Linux / macOS / WSL
-curl --proto '=https' --tlsv1.2 -sSf https://nova-lang.org/install.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/samprit-web/NOVA/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
-irm https://nova-lang.org/install.ps1 | iex
+irm https://raw.githubusercontent.com/samprit-web/NOVA/main/scripts/install.ps1 | iex
 
 # Homebrew
 brew install nova-lang
@@ -1019,11 +1019,10 @@ nova --help
 
 ## Appendix D: Community & Governance
 
-- **Website:** https://nova-lang.org
-- **Documentation:** https://docs.nova-lang.org
 - **GitHub:** https://github.com/samprit-web/NOVA
-- **Discord:** https://discord.gg/nova-lang
-- **Forum:** https://forum.nova-lang.org
+- **Issues & Discussions:** https://github.com/samprit-web/NOVA/issues
+- **Documentation:** https://github.com/samprit-web/NOVA/tree/main/docs
+- **Examples:** https://github.com/samprit-web/NOVA/tree/main/examples
 - **Mastodon:** @nova_lang@fosstodon.org
 - **Twitter/X:** @nova_lang
 
