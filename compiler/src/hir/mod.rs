@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{Span, FileId, NodeId};
-use crate::ast::{Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, Lifetime, AttrStyle, Attribute, MetaItem};
+pub use crate::ast::{Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, Lifetime, AttrStyle, Attribute, MetaItem, GenericArg, WhereClause, GenericArgs, DurationExpr, TimeUnit, SupervisionStrategy, SupervisionSpec, PipelineStageKind};
 
-pub use crate::ast::{GenericArg, WhereClause, GenericArgs};
+pub use crate::hir::lower::lower;
 
 /// HIR program
 #[derive(Debug, Clone)]
@@ -588,6 +588,110 @@ pub mod lower {
     use super::*;
     use crate::ast;
     use crate::{Session, Diagnostic, Severity};
+
+    // Type definitions used during lowering (moved out of impl block)
+    #[derive(Debug, Clone)]
+    pub enum GenericParamKind {
+        Type { bounds: Option<GenericBounds>, default: Option<Type> },
+        Const { ty: Type, default: Option<Expr> },
+        Lifetime,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct GenericBounds {
+        pub bounds: Vec<GenericBound>,
+        pub span: Span,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct GenericBound {
+        pub trait_ref: TraitRef,
+        pub span: Span,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct WhereClause {
+        pub predicates: Vec<WherePredicate>,
+        pub span: Span,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct WherePredicate {
+        pub ty: Type,
+        pub bounds: GenericBounds,
+        pub span: Span,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct GenericArgs {
+        pub args: Vec<GenericArg>,
+        pub span: Span,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum GenericArg {
+        Type(Type),
+        Const(Expr),
+        Lifetime(Lifetime),
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum AssignOp {
+        Assign,
+        AddAssign,
+        SubAssign,
+        MulAssign,
+        DivAssign,
+        RemAssign,
+        BitAndAssign,
+        BitOrAssign,
+        BitXorAssign,
+        ShlAssign,
+        ShrAssign,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum BinOp {
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Rem,
+        BitAnd,
+        BitOr,
+        BitXor,
+        Shl,
+        Shr,
+        Eq,
+        Ne,
+        Lt,
+        Le,
+        Gt,
+        Ge,
+        And,
+        Or,
+        As,
+        Is,
+        In,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum UnOp {
+        Neg,
+        Not,
+        BitNot,
+        Deref,
+        Ref,
+        RefMut,
+        Box,
+        Try,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum RangeEnd {
+        Exclusive,
+        Inclusive,
+    }
 
     pub fn lower(session: &mut Session, ast: ast::Program) -> Result<Program, Vec<Diagnostic>> {
         let mut lowerer = Lowerer::new(session);
@@ -1167,13 +1271,6 @@ pub mod lower {
             }
         }
 
-        #[derive(Debug, Clone)]
-        pub enum GenericParamKind {
-            Type { bounds: Option<GenericBounds>, default: Option<Type> },
-            Const { ty: Type, default: Option<Expr> },
-            Lifetime,
-        }
-
         fn lower_generic_bounds(&mut self, b: ast::GenericBounds) -> GenericBounds {
             GenericBounds {
                 bounds: b.bounds.into_iter().map(|bound| GenericBound {
@@ -1193,13 +1290,6 @@ pub mod lower {
                 }).collect(),
                 span: wc.span,
             }).unwrap_or(WhereClause { predicates: Vec::new(), span: self.current_span() })
-        }
-
-        #[derive(Debug, Clone)]
-        pub struct WherePredicate {
-            pub ty: Type,
-            pub bounds: GenericBounds,
-            pub span: Span,
         }
 
         fn lower_generic_args(&mut self, g: ast::GenericArgs) -> GenericArgs {

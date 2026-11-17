@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::{Span, FileId, SourceMap};
 
 /// Diagnostic severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
     /// Compiler bug - should never happen
     Bug,
@@ -21,7 +21,7 @@ pub enum Severity {
 }
 
 /// A single diagnostic message
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub message: String,
@@ -33,21 +33,21 @@ pub struct Diagnostic {
 }
 
 /// Label attached to a diagnostic (for highlighting source code)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Label {
     pub span: Span,
     pub message: String,
     pub style: LabelStyle,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LabelStyle {
     Primary,
     Secondary,
 }
 
 /// Note attached to a diagnostic
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Note {
     pub message: String,
     pub span: Option<Span>,
@@ -108,7 +108,7 @@ impl Diagnostic {
 }
 
 /// Collection of diagnostics
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct DiagnosticCollection {
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -175,7 +175,7 @@ impl<'a> DiagnosticEmitter<'a> {
         if let Some(location) = self.source_map.span_to_location(diagnostic.span) {
             if let Some(file) = self.source_map.get_file(location.file) {
                 output.push_str(&format!("{}  --> {}:{}:{}\n", prefix, file.path.display(), location.line, location.column));
-                self.emit_source_context(output, file, location, &prefix);
+                self.emit_source_context(output, file, location, diagnostic.span, &prefix);
             }
         }
 
@@ -212,7 +212,7 @@ impl<'a> DiagnosticEmitter<'a> {
         }
     }
 
-    fn emit_source_context(&self, output: &mut String, file: &crate::SourceFile, location: crate::Location, prefix: &str) {
+    fn emit_source_context(&self, output: &mut String, file: &crate::SourceFile, location: crate::Location, span: crate::Span, prefix: &str) {
         let line_idx = location.line - 1;
         if line_idx < file.lines.len() {
             let line_start = file.lines[line_idx];
@@ -221,7 +221,7 @@ impl<'a> DiagnosticEmitter<'a> {
 
             output.push_str(&format!("{}   |\n", prefix));
             output.push_str(&format!("{} {:4} | {}\n", prefix, location.line, line_content.trim_end()));
-            output.push_str(&format!("{}   | {}{}^\n", prefix, " ".repeat(location.column - 1), "^".repeat(1.max(diagnostic.span.end - diagnostic.span.start))));
+            output.push_str(&format!("{}   | {}{}^\n", prefix, " ".repeat(location.column - 1), "^".repeat(1.max(span.end - span.start))));
         }
     }
 

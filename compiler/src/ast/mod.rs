@@ -39,6 +39,12 @@ pub enum Item {
     Macro(MacroDecl),
     MacroRules(MacroRulesDecl),
     Attribute(AttributeItem),
+    // NOVA Unique Features
+    Effect(EffectDecl),
+    EffectHandler(EffectHandlerDecl),
+    Actor(ActorDecl),
+    Comptime(ComptimeDecl),
+    Pipeline(PipelineDecl),
 }
 
 /// Use declaration
@@ -286,6 +292,157 @@ pub struct AttributeItem {
     pub span: Span,
 }
 
+/// Effect declaration (NOVA unique feature - Algebraic Effects)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectDecl {
+    pub attrs: Vec<Attribute>,
+    pub visibility: Visibility,
+    pub name: Ident,
+    pub generics: Generics,
+    pub operations: Vec<EffectOperation>,
+    pub span: Span,
+}
+
+/// Effect operation signature
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectOperation {
+    pub attrs: Vec<Attribute>,
+    pub name: Ident,
+    pub params: Vec<Param>,
+    pub return_type: Option<TypeExpr>,
+    pub span: Span,
+}
+
+/// Effect handler declaration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectHandlerDecl {
+    pub attrs: Vec<Attribute>,
+    pub visibility: Visibility,
+    pub effect: Path,
+    pub generics: Generics,
+    pub handlers: Vec<EffectHandlerArm>,
+    pub span: Span,
+}
+
+/// Effect handler arm (handles one operation)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectHandlerArm {
+    pub attrs: Vec<Attribute>,
+    pub operation: Ident,
+    pub params: Vec<Param>,
+    pub body: Block,
+    pub span: Span,
+}
+
+/// Actor declaration (NOVA unique feature - Actor Model)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActorDecl {
+    pub attrs: Vec<Attribute>,
+    pub visibility: Visibility,
+    pub name: Ident,
+    pub generics: Generics,
+    pub fields: Vec<StructField>,
+    pub methods: Vec<FunctionDecl>,
+    pub supervision: Option<SupervisionSpec>,
+    pub span: Span,
+}
+
+/// Supervision specification for actors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupervisionSpec {
+    pub strategy: SupervisionStrategy,
+    pub max_restarts: Option<u32>,
+    pub time_window: Option<DurationExpr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SupervisionStrategy {
+    OneForOne,
+    OneForAll,
+    RestForOne,
+}
+
+/// Duration expression for supervision
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DurationExpr {
+    pub value: u64,
+    pub unit: TimeUnit,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TimeUnit {
+    Nanoseconds,
+    Microseconds,
+    Milliseconds,
+    Seconds,
+    Minutes,
+    Hours,
+}
+
+/// Comptime declaration (NOVA unique feature - Compile-time execution)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComptimeDecl {
+    pub attrs: Vec<Attribute>,
+    pub visibility: Visibility,
+    pub kind: ComptimeKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComptimeKind {
+    /// comptime { ... } block
+    Block(Block),
+    /// comptime fn name() { ... }
+    Function(FunctionDecl),
+    /// comptime const NAME = expr
+    Const(Ident, TypeExpr, Expr),
+    /// comptime static NAME = expr
+    Static(Ident, TypeExpr, Expr),
+}
+
+/// Pipeline declaration (NOVA unique feature - Pipeline operators)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineDecl {
+    pub attrs: Vec<Attribute>,
+    pub visibility: Visibility,
+    pub name: Ident,
+    pub generics: Generics,
+    pub stages: Vec<PipelineStage>,
+    pub span: Span,
+}
+
+/// Pipeline stage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineStage {
+    pub attrs: Vec<Attribute>,
+    pub kind: PipelineStageKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PipelineStageKind {
+    /// data.filter(...)
+    Filter(Expr),
+    /// data.map(...)
+    Map(Expr),
+    /// data.flat_map(...)
+    FlatMap(Expr),
+    /// data.fold(init, ...)
+    Fold(Expr, Expr),
+    /// data.reduce(...)
+    Reduce(Expr),
+    /// data.collect()
+    Collect(Option<TypeExpr>),
+    /// data.take(n)
+    Take(Expr),
+    /// data.skip(n)
+    Skip(Expr),
+    /// Custom stage
+    Custom(Ident, Vec<Expr>),
+}
+
 /// Common types
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -501,6 +658,20 @@ pub enum ExprKind {
     Macro(MacroInvocation),
     // Paren
     Paren(Box<Expr>),
+    // NOVA Unique Features - Effect System
+    EffectPerform(Path, Vec<Expr>),                    // perform Effect::operation(args)
+    EffectHandle(Box<Expr>, Vec<EffectHandlerArm>),    // handle expr with { ... }
+    // NOVA Unique Features - Actor Model
+    ActorSpawn(Box<Expr>),                             // actor_expr.spawn()
+    ActorSend(Box<Expr>, Box<Expr>),                   // actor_ref.send(msg)
+    ActorCall(Box<Expr>, Ident, Vec<Expr>),            // actor_ref.method(args)
+    ActorSupervise(Box<Expr>, SupervisionSpec),        // supervise(actor, spec)
+    // NOVA Unique Features - Comptime
+    Comptime(Box<Expr>),                               // comptime { expr }
+    ComptimeEval(Box<Expr>),                           // @comptime(expr)
+    // NOVA Unique Features - Pipeline Operators
+    Pipeline(Box<Expr>, Vec<PipelineStage>),           // data |> stage1 |> stage2
+    PipelineStageExpr(PipelineStageKind, Vec<Expr>),   // .filter(...), .map(...), etc.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -574,6 +745,9 @@ pub enum Pattern {
     Range(Box<Expr>, RangeEnd, Box<Expr>),
     Guard(Box<Pattern>, Box<Expr>),
     Macro(MacroInvocation),
+    // NOVA Unique Features
+    EffectBind(Ident, Path, Ident, Vec<Pattern>),  // op args => handler
+    ActorPattern(Path, Ident, Option<Vec<Pattern>>), // Actor::Variant(fields)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -725,6 +899,10 @@ pub enum StmtKind {
     Expr(Expr),
     Macro(MacroInvocation),
     Empty,
+    // NOVA Unique Features
+    EffectHandle(Box<Expr>, Vec<EffectHandlerArm>),    // handle expr with { ... }
+    ActorSpawn(Box<Expr>),                             // spawn actor
+    Comptime(Block),                                   // comptime { ... }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

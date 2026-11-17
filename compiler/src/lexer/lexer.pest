@@ -164,6 +164,8 @@ pattern = {
     wildcard_pattern | literal_pattern | binding_pattern | tuple_pattern
     | struct_pattern | enum_pattern | slice_pattern | or_pattern | ref_pattern
     | range_pattern | guard_pattern
+    // NOVA Unique Features - Patterns
+    | effect_bind_pattern | actor_pattern
 }
 
 wildcard_pattern = { "_" }
@@ -180,6 +182,10 @@ ref_pattern = { "&" ~ "mut"? ~ pattern }
 range_pattern = { expr ~ ".." ~ ("=")? ~ expr }
 guard_pattern = { pattern ~ "if" ~ expr }
 
+// NOVA Unique Features - Patterns
+effect_bind_pattern = { ident ~ "(" ~ pattern_list? ~ ")" ~ "=>" ~ block_expr }
+actor_pattern = { path_type ~ ("(" ~ pattern_list? ~ ")")? }
+
 pattern_list = { pattern ~ ("," ~ pattern)* ~ ","? }
 
 // ============================================================================
@@ -191,6 +197,11 @@ expr = {
     | try_expr | await_expr | return_expr | break_expr | continue_expr
     | yield_expr | assign_expr | binary_expr | unary_expr | postfix_expr
     | primary_expr
+    // NOVA Unique Features - Expressions
+    | effect_perform_expr | effect_handle_expr
+    | actor_spawn_expr | actor_send_expr | actor_call_expr | actor_supervise_expr
+    | comptime_expr | comptime_eval_expr
+    | pipeline_expr
 }
 
 block_expr = { "{" ~ stmt* ~ expr? ~ "}" }
@@ -274,18 +285,50 @@ macro_invocation = { ident ~ "!" ~ macro_args }
 macro_args = { "(" ~ token_tree* ~ ")" | "[" ~ token_tree* ~ "]" | "{" ~ token_tree* ~ "}" }
 token_tree = { ident | literal | punct | "(" ~ token_tree* ~ ")" | "[" ~ token_tree* ~ "]" | "{" ~ token_tree* ~ "}" }
 
+// NOVA Unique Features - Expressions
+effect_perform_expr = { "perform" ~ path_type ~ "(" ~ expr_list? ~ ")" }
+effect_handle_expr = { "handle" ~ expr ~ "with" ~ "{" ~ effect_handler_arm* ~ "}" }
+
+actor_spawn_expr = { "spawn" ~ "(" ~ expr ~ ")" }
+actor_send_expr = { expr ~ "." ~ "send" ~ "(" ~ expr ~ ")" }
+actor_call_expr = { expr ~ "." ~ ident ~ "(" ~ expr_list? ~ ")" }
+actor_supervise_expr = { "supervise" ~ "(" ~ expr ~ "," ~ supervision_spec ~ ")" }
+
+comptime_expr = { "comptime" ~ block_expr }
+comptime_eval_expr = { "@" ~ "comptime" ~ "(" ~ expr ~ ")" }
+
+pipeline_expr = { expr ~ ("|>" ~ pipeline_stage_expr)+ }
+pipeline_stage_expr = {
+    "filter" ~ "(" ~ expr ~ ")"
+    | "map" ~ "(" ~ expr ~ ")"
+    | "flat_map" ~ "(" ~ expr ~ ")"
+    | "fold" ~ "(" ~ expr ~ "," ~ expr ~ ")"
+    | "reduce" ~ "(" ~ expr ~ ")"
+    | "collect" ~ ("(" ~ type? ~ ")")?
+    | "take" ~ "(" ~ expr ~ ")"
+    | "skip" ~ "(" ~ expr ~ ")"
+    | ident ~ "(" ~ expr_list? ~ ")"
+}
+
 // ============================================================================
 // STATEMENTS
 // ============================================================================
 
 stmt = {
     let_stmt | item_stmt | expr_stmt | macro_stmt
+    // NOVA Unique Features - Statements
+    | effect_handle_stmt | actor_spawn_stmt | comptime_stmt
 }
 
 let_stmt = { "let" ~ "mut"? ~ pattern ~ (":" ~ type)? ~ "=" ~ expr ~ ";" }
 item_stmt = { item }
 expr_stmt = { expr ~ ";" }
 macro_stmt = { macro_invocation ~ ";" }
+
+// NOVA Unique Features - Statements
+effect_handle_stmt = { "handle" ~ expr ~ "with" ~ "{" ~ effect_handler_arm* ~ "}" }
+actor_spawn_stmt = { "spawn" ~ expr ~ ";" }
+comptime_stmt = { "comptime" ~ block_expr ~ ";" }
 
 // ============================================================================
 // ITEMS
@@ -295,6 +338,8 @@ item = {
     use_decl | mod_decl | extern_crate | fn_decl | struct_decl | enum_decl
     | type_alias | trait_decl | impl_decl | const_decl | static_decl
     | macro_decl | macro_rules_decl | attribute_item
+    // NOVA Unique Features
+    | effect_decl | effect_handler_decl | actor_decl | comptime_decl | pipeline_decl
 }
 
 use_decl = { "use" ~ use_tree ~ ";" }
@@ -353,6 +398,43 @@ attribute_item = { "#" ~ "[" ~ attribute ~ "]" }
 attribute = { path_expr ~ ("(" ~ meta_item_list? ~ ")")? }
 meta_item_list = { meta_item ~ ("," ~ meta_item)* ~ ","? }
 meta_item = { path_expr | literal | path_expr ~ "=" ~ expr }
+
+// ============================================================================
+// NOVA UNIQUE FEATURES - ITEMS
+// ============================================================================
+
+// Effect declarations
+effect_decl = { ("pub")? ~ "effect" ~ ident ~ generic_params? ~ where_clause? ~ "{" ~ effect_operation* ~ "}" }
+effect_operation = { ("pub")? ~ ident ~ "(" ~ fn_params? ~ ")" ~ ("->" ~ type)? ~ ";" }
+
+// Effect handler declarations
+effect_handler_decl = { ("pub")? ~ "handle" ~ path_type ~ generic_params? ~ where_clause? ~ "{" ~ effect_handler_arm* ~ "}" }
+effect_handler_arm = { ("pub")? ~ ident ~ "(" ~ fn_params? ~ ")" ~ block_expr }
+
+// Actor declarations
+actor_decl = { ("pub")? ~ "actor" ~ ident ~ generic_params? ~ where_clause? ~ "{" ~ actor_field* ~ actor_method* ~ supervision_spec? ~ "}" }
+actor_field = { ("pub")? ~ ident ~ ":" ~ type ~ ("=" ~ expr)? ~ ";" }
+actor_method = { ("pub")? ~ ("async")? ~ ("unsafe")? ~ "fn" ~ ident ~ generic_params? ~ "(" ~ fn_params? ~ ")" ~ ("->" ~ type)? ~ where_clause? ~ block_expr }
+supervision_spec = { "supervise" ~ "(" ~ supervision_strategy ~ ("," ~ "max_restarts" ~ "=" ~ integer)? ~ ("," ~ "time_window" ~ "=" ~ duration_expr)? ~ ")" ~ ";" }
+supervision_strategy = { "one_for_one" | "one_for_all" | "rest_for_one" }
+duration_expr = { integer ~ ("ns" | "us" | "ms" | "s" | "m" | "h") }
+
+// Comptime declarations
+comptime_decl = { ("pub")? ~ "comptime" ~ (block_expr | fn_decl | const_decl | static_decl) }
+
+// Pipeline declarations
+pipeline_decl = { ("pub")? ~ "pipeline" ~ ident ~ generic_params? ~ where_clause? ~ "{" ~ pipeline_stage* ~ "}" }
+pipeline_stage = {
+    "filter" ~ "(" ~ expr ~ ")" ~ ";"
+    | "map" ~ "(" ~ expr ~ ")" ~ ";"
+    | "flat_map" ~ "(" ~ expr ~ ")" ~ ";"
+    | "fold" ~ "(" ~ expr ~ "," ~ expr ~ ")" ~ ";"
+    | "reduce" ~ "(" ~ expr ~ ")" ~ ";"
+    | "collect" ~ ("(" ~ type? ~ ")")? ~ ";"
+    | "take" ~ "(" ~ expr ~ ")" ~ ";"
+    | "skip" ~ "(" ~ expr ~ ")" ~ ";"
+    | ident ~ "(" ~ expr_list? ~ ")" ~ ";"  // Custom stage
+}
 
 // ============================================================================
 // TOP LEVEL

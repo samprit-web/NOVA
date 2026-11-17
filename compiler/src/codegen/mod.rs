@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use crate::{Session, Span, Type};
-use crate::mir::{Program, MirItem, Function, Body, BasicBlock, Statement, Terminator, Place, LocalDecl, Rvalue, Operand, Constant, BinOp, UnOp, CastKind, AggregateKind, Call, SwitchTargets, AssertKind, BasicBlockId, LocalId, FieldIdx, ItemId, Param, FnSig, Generics, StatementKind, TypeDefinition, TypeDefKind, Field, Variant};
+use crate::mir::{Program, MirItem, Function, Body, BasicBlock, Statement, Terminator, Place, LocalDecl, Rvalue, Operand, Constant, ConstantKind, BinOp, UnOp, CastKind, AggregateKind, Call, SwitchTargets, AssertKind, BasicBlockId, LocalId, FieldIdx, ItemId, Param, FnSig, Generics, StatementKind, TypeDefinition, TypeDefKind, Field, Variant};
 
 /// Codegen backend trait
 pub trait CodegenBackend {

@@ -10,7 +10,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::mir::{Program, MirItem, Function, Body, BasicBlock, Statement, Terminator, Place, LocalDecl, Rvalue, Operand, Constant, BinOp, UnOp, StatementKind, Terminator, BasicBlockId, LocalId, ConstantKind};
+use crate::mir::{Program, MirItem, Function, Body, BasicBlock, Statement, Terminator, Place, LocalDecl, Rvalue, Operand, Constant, BinOp, UnOp, StatementKind, BasicBlockId, LocalId, ConstantKind};
 
 /// Optimization level
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -465,13 +465,22 @@ impl Terminator {
             Terminator::Yield(place, _) => vec![Operand::Move(place.clone())],
             Terminator::InlineAsm(asm) => {
                 asm.operands.iter().filter_map(|op| match &op.kind {
-                    crate::mir::AsmOperandKind::In(o) | crate::mir::AsmOperandKind::Out(_, _) | crate::mir::AsmOperandKind::InOut(_, o) => Some(o.clone()),
+                    crate::mir::AsmOperandKind::In(o) => Some(o.clone()),
+                    crate::mir::AsmOperandKind::InOut(_, o) => Some(o.clone()),
+                    crate::mir::AsmOperandKind::Out(place, _) => Some(Operand::Move(place.clone())),
                     _ => None,
                 }).collect()
             }
             _ => vec![],
         }
     }
+}
+
+/// Free function wrapper for optimizer (for backward compatibility)
+pub fn optimize(session: &mut crate::Session, mut program: crate::mir::Program) -> Result<crate::mir::Program, OptimizerError> {
+    let optimizer = Optimizer::new(OptLevel::Standard);
+    optimizer.optimize(&mut program)?;
+    Ok(program)
 }
 
 // Need to add Call struct to mir for this to work

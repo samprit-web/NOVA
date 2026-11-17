@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::{BytecodeModule, BytecodeFunction, Instruction, ConstantPool, TypeTable, GlobalVar, Type, Constant, Span, FileId};
+use crate::{BytecodeModule, BytecodeFunction, Instruction, ConstantPool, TypeTable, GlobalVar, Type, Constant, ConstantKind, Span, FileId};
 
 /// VM configuration
 #[derive(Debug, Clone)]

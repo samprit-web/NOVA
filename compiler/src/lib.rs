@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
-use nova_diagnostics::{Diagnostic, DiagnosticCollection, Severity};
+use crate::diagnostics::{Diagnostic, DiagnosticCollection, Severity};
 
 /// Compilation session containing all state needed for compilation
 pub struct Session {

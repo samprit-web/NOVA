@@ -169,6 +169,22 @@ impl<'a> Parser<'a> {
         if self.match_token(TokenKind::MacroRules) {
             return self.parse_macro_rules_decl(attrs, visibility);
         }
+        // NOVA Unique Features - Items
+        if self.match_token(TokenKind::Effect) {
+            return self.parse_effect_decl(attrs, visibility);
+        }
+        if self.match_token(TokenKind::Handle) {
+            return self.parse_effect_handler_decl(attrs, visibility);
+        }
+        if self.match_token(TokenKind::Actor) {
+            return self.parse_actor_decl(attrs, visibility);
+        }
+        if self.match_token(TokenKind::Comptime) {
+            return self.parse_comptime_decl(attrs, visibility);
+        }
+        if self.match_token(TokenKind::Pipeline) {
+            return self.parse_pipeline_decl(attrs, visibility);
+        }
 
         // Check for modifiers before fn
         let mut constness = Constness::NotConst;
@@ -899,6 +915,354 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // ========================================================================
+    // NOVA Unique Features - Item Parsing
+    // ========================================================================
+
+    fn parse_effect_decl(&mut self, attrs: Vec<Attribute>, visibility: Visibility) -> Result<Item, Diagnostic> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+        let where_clause = self.parse_where_clause()?;
+        self.expect(TokenKind::LBrace, "Expected {")?;
+        let mut operations = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.is_at_end() {
+            operations.push(self.parse_effect_operation()?);
+        }
+        self.expect(TokenKind::RBrace, "Expected }")?;
+        let span = self.previous_span();
+        Ok(Item::Effect(EffectDecl {
+            attrs,
+            visibility,
+            name,
+            generics,
+            operations,
+            span,
+        }))
+    }
+
+    fn parse_effect_operation(&mut self) -> Result<EffectOperation, Diagnostic> {
+        let attrs = self.parse_attributes()?;
+        let name = self.parse_ident()?;
+        self.expect(TokenKind::LParen, "Expected (")?;
+        let params = self.parse_fn_params()?;
+        self.expect(TokenKind::RParen, "Expected )")?;
+        let return_type = if self.match_token(TokenKind::Arrow) {
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
+        self.expect(TokenKind::Semi, "Expected ;")?;
+        Ok(EffectOperation {
+            attrs,
+            name,
+            params,
+            return_type,
+            span: self.previous_span(),
+        })
+    }
+
+    fn parse_effect_handler_decl(&mut self, attrs: Vec<Attribute>, visibility: Visibility) -> Result<Item, Diagnostic> {
+        let effect = self.parse_path()?;
+        let generics = self.parse_generics()?;
+        let where_clause = self.parse_where_clause()?;
+        self.expect(TokenKind::LBrace, "Expected {")?;
+        let mut handlers = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.is_at_end() {
+            handlers.push(self.parse_effect_handler_arm()?);
+        }
+        self.expect(TokenKind::RBrace, "Expected }")?;
+        let span = self.previous_span();
+        Ok(Item::EffectHandler(EffectHandlerDecl {
+            attrs,
+            visibility,
+            effect,
+            generics,
+            handlers,
+            span,
+        }))
+    }
+
+    fn parse_effect_handler_arm(&mut self) -> Result<EffectHandlerArm, Diagnostic> {
+        let attrs = self.parse_attributes()?;
+        let operation = self.parse_ident()?;
+        self.expect(TokenKind::LParen, "Expected (")?;
+        let params = self.parse_fn_params()?;
+        self.expect(TokenKind::RParen, "Expected )")?;
+        let body = self.parse_block()?;
+        Ok(EffectHandlerArm {
+            attrs,
+            operation,
+            params,
+            body,
+            span: self.previous_span(),
+        })
+    }
+
+    fn parse_actor_decl(&mut self, attrs: Vec<Attribute>, visibility: Visibility) -> Result<Item, Diagnostic> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+        let where_clause = self.parse_where_clause()?;
+        self.expect(TokenKind::LBrace, "Expected {")?;
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        let mut supervision = None;
+        while !self.check(TokenKind::RBrace) && !self.is_at_end() {
+            if self.check(TokenKind::Pub) || self.check(TokenKind::Ident("pub".to_string())) {
+                // Could be field or method
+                if self.peek(1).map(|t| matches!(t.kind, TokenKind::Ident(_))).unwrap_or(false) {
+                    let next = self.peek(2);
+                    if next.map(|t| matches!(t.kind, TokenKind::Colon)).unwrap_or(false) {
+                        fields.push(self.parse_struct_field()?);
+                        continue;
+                    }
+                }
+            }
+            if self.match_token(TokenKind::Ident("supervise".to_string())) {
+                supervision = Some(self.parse_supervision_spec()?);
+                continue;
+            }
+            methods.push(self.parse_function_decl(Vec::new(), visibility, Constness::NotConst, Asyncness::NotAsync, Unsafety::NotUnsafe)?);
+        }
+        self.expect(TokenKind::RBrace, "Expected }")?;
+        let span = self.previous_span();
+        Ok(Item::Actor(ActorDecl {
+            attrs,
+            visibility,
+            name,
+            generics,
+            fields,
+            methods,
+            supervision,
+            span,
+        }))
+    }
+
+    fn parse_supervision_spec(&mut self) -> Result<SupervisionSpec, Diagnostic> {
+        self.expect(TokenKind::LParen, "Expected (")?;
+        let strategy = self.parse_supervision_strategy()?;
+        let mut max_restarts = None;
+        let mut time_window = None;
+        while self.match_token(TokenKind::Comma) {
+            if self.match_token(TokenKind::Ident("max_restarts".to_string())) {
+                self.expect(TokenKind::Assign, "Expected =")?;
+                let token = self.advance().ok_or_else(|| self.error("Expected integer".to_string()))?;
+                if let TokenKind::Integer(s) = token.kind {
+                    max_restarts = Some(s.parse().unwrap_or(0));
+                }
+            } else if self.match_token(TokenKind::Ident("time_window".to_string())) {
+                self.expect(TokenKind::Assign, "Expected =")?;
+                time_window = Some(self.parse_duration_expr()?);
+            }
+        }
+        self.expect(TokenKind::RParen, "Expected )")?;
+        self.expect(TokenKind::Semi, "Expected ;")?;
+        Ok(SupervisionSpec {
+            strategy,
+            max_restarts,
+            time_window,
+            span: self.previous_span(),
+        })
+    }
+
+    fn parse_supervision_strategy(&mut self) -> Result<SupervisionStrategy, Diagnostic> {
+        let token = self.advance().ok_or_else(|| self.error("Expected supervision strategy".to_string()))?;
+        match token.kind {
+            TokenKind::Ident(s) => Ok(match s.as_str() {
+                "one_for_one" => SupervisionStrategy::OneForOne,
+                "one_for_all" => SupervisionStrategy::OneForAll,
+                "rest_for_one" => SupervisionStrategy::RestForOne,
+                _ => SupervisionStrategy::OneForOne,
+            }),
+            _ => Err(self.error("Expected supervision strategy".to_string())),
+        }
+    }
+
+    fn parse_duration_expr(&mut self) -> Result<DurationExpr, Diagnostic> {
+        let token = self.advance().ok_or_else(|| self.error("Expected duration".to_string()))?;
+        let value = if let TokenKind::Integer(s) = token.kind {
+            s.parse().unwrap_or(0)
+        } else {
+            0
+        };
+        let unit_token = self.advance().ok_or_else(|| self.error("Expected time unit".to_string()))?;
+        let unit = match unit_token.kind {
+            TokenKind::Ident(s) => match s.as_str() {
+                "ns" => TimeUnit::Nanoseconds,
+                "us" => TimeUnit::Microseconds,
+                "ms" => TimeUnit::Milliseconds,
+                "s" => TimeUnit::Seconds,
+                "m" => TimeUnit::Minutes,
+                "h" => TimeUnit::Hours,
+                _ => TimeUnit::Milliseconds,
+            },
+            _ => TimeUnit::Milliseconds,
+        };
+        Ok(DurationExpr {
+            value,
+            unit,
+            span: self.previous_span(),
+        })
+    }
+
+    fn parse_struct_field(&mut self) -> Result<StructField, Diagnostic> {
+        let attrs = self.parse_attributes()?;
+        let visibility = self.parse_visibility()?;
+        let name = self.parse_ident()?;
+        self.expect(TokenKind::Colon, "Expected :")?;
+        let ty = self.parse_type_expr()?;
+        let default = if self.match_token(TokenKind::Assign) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        self.expect(TokenKind::Semi, "Expected ;")?;
+        Ok(StructField {
+            attrs,
+            visibility,
+            name,
+            ty,
+            default,
+            span: self.previous_span(),
+        })
+    }
+
+    fn parse_comptime_decl(&mut self, attrs: Vec<Attribute>, visibility: Visibility) -> Result<Item, Diagnostic> {
+        let span_start = self.current_span();
+        let kind = if self.check(TokenKind::LBrace) {
+            let block = self.parse_block()?;
+            ComptimeKind::Block(block)
+        } else if self.check(TokenKind::Fn) {
+            let func = self.parse_function_decl(attrs.clone(), visibility, Constness::NotConst, Asyncness::NotAsync, Unsafety::NotUnsafe)?;
+            if let Item::Function(f) = func {
+                ComptimeKind::Function(f)
+            } else {
+                ComptimeKind::Block(Block { stmts: Vec::new(), expr: None, span: span_start, labels: Vec::new() })
+            }
+        } else if self.check(TokenKind::Const) {
+            let ident = self.parse_ident()?;
+            self.expect(TokenKind::Colon, "Expected :")?;
+            let ty = self.parse_type_expr()?;
+            self.expect(TokenKind::Assign, "Expected =")?;
+            let value = self.parse_expr()?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            ComptimeKind::Const(ident, ty, value)
+        } else if self.check(TokenKind::Static) {
+            let ident = self.parse_ident()?;
+            self.expect(TokenKind::Colon, "Expected :")?;
+            let ty = self.parse_type_expr()?;
+            self.expect(TokenKind::Assign, "Expected =")?;
+            let value = self.parse_expr()?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            ComptimeKind::Static(ident, ty, value)
+        } else {
+            let block = self.parse_block()?;
+            ComptimeKind::Block(block)
+        };
+        Ok(Item::Comptime(ComptimeDecl {
+            attrs,
+            visibility,
+            kind,
+            span: self.previous_span(),
+        }))
+    }
+
+    fn parse_pipeline_decl(&mut self, attrs: Vec<Attribute>, visibility: Visibility) -> Result<Item, Diagnostic> {
+        let name = self.parse_ident()?;
+        let generics = self.parse_generics()?;
+        let where_clause = self.parse_where_clause()?;
+        self.expect(TokenKind::LBrace, "Expected {")?;
+        let mut stages = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.is_at_end() {
+            stages.push(self.parse_pipeline_stage()?);
+        }
+        self.expect(TokenKind::RBrace, "Expected }")?;
+        let span = self.previous_span();
+        Ok(Item::Pipeline(PipelineDecl {
+            attrs,
+            visibility,
+            name,
+            generics,
+            stages,
+            span,
+        }))
+    }
+
+    fn parse_pipeline_stage(&mut self) -> Result<PipelineStage, Diagnostic> {
+        let attrs = self.parse_attributes()?;
+        let kind = if self.match_token(TokenKind::Ident("filter".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Filter(expr)
+        } else if self.match_token(TokenKind::Ident("map".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Map(expr)
+        } else if self.match_token(TokenKind::Ident("flat_map".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::FlatMap(expr)
+        } else if self.match_token(TokenKind::Ident("fold".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let init = self.parse_expr()?;
+            self.expect(TokenKind::Comma, "Expected ,")?;
+            let func = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Fold(init, func)
+        } else if self.match_token(TokenKind::Ident("reduce".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let func = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Reduce(func)
+        } else if self.match_token(TokenKind::Ident("collect".to_string())) {
+            let ty = if self.match_token(TokenKind::LParen) {
+                if self.check(TokenKind::RBracket) || self.check(TokenKind::Ident("".to_string())) {
+                    let ty = self.parse_type_expr()?;
+                    self.expect(TokenKind::RParen, "Expected )")?;
+                    Some(ty)
+                } else {
+                    self.expect(TokenKind::RParen, "Expected )")?;
+                    None
+                }
+            } else {
+                None
+            };
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Collect(ty)
+        } else if self.match_token(TokenKind::Ident("take".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Take(expr)
+        } else if self.match_token(TokenKind::Ident("skip".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Skip(expr)
+        } else {
+            let ident = self.parse_ident()?;
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let args = self.parse_expr_list()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            self.expect(TokenKind::Semi, "Expected ;")?;
+            PipelineStageKind::Custom(ident, args)
+        };
+        Ok(PipelineStage {
+            attrs,
+            kind,
+            span: self.previous_span(),
+        })
+    }
+
     fn parse_macro_param(&mut self) -> Result<MacroParam, Diagnostic> {
         let name = self.parse_ident()?;
         self.expect(TokenKind::Colon, "Expected :")?;
@@ -1255,6 +1619,23 @@ impl<'a> Parser<'a> {
                     attrs: Vec::new(),
                     node_id: self.next_node_id(),
                 };
+            } else if self.match_token(TokenKind::PipeRight) {
+                // Pipeline operator: expr |> stage1 |> stage2
+                let mut stages = Vec::new();
+                loop {
+                    let stage = self.parse_pipeline_stage_expr()?;
+                    stages.push(stage);
+                    if !self.match_token(TokenKind::PipeRight) {
+                        break;
+                    }
+                }
+                let span = Span::new(self.file_id, expr.span.start, self.previous_span().end);
+                expr = Expr {
+                    kind: ExprKind::Pipeline(Box::new(expr), stages),
+                    span,
+                    attrs: Vec::new(),
+                    node_id: self.next_node_id(),
+                };
             } else {
                 break;
             }
@@ -1291,6 +1672,12 @@ impl<'a> Parser<'a> {
                     "continue" => self.parse_continue_expr(span),
                     "yield" => self.parse_yield_expr(span),
                     "async" => self.parse_async_block(span),
+                    // NOVA Unique Features - Expression keywords
+                    "perform" => self.parse_effect_perform_expr(span),
+                    "handle" => self.parse_effect_handle_expr(span),
+                    "spawn" => self.parse_actor_spawn_expr(span),
+                    "supervise" => self.parse_actor_supervise_expr(span),
+                    "comptime" => self.parse_comptime_expr(span),
                     "move" | "mut" | "ref" | "box" => {
                         // These are parsed as part of patterns, not expressions
                         // Fall through to path
@@ -1593,6 +1980,153 @@ impl<'a> Parser<'a> {
         })
     }
 
+    // ========================================================================
+    // NOVA Unique Features - Expression Parsing
+    // ========================================================================
+
+    fn parse_effect_perform_expr(&mut self, start_span: Span) -> Result<Expr, Diagnostic> {
+        // perform Effect::operation(args)
+        let path = self.parse_path()?;
+        self.expect(TokenKind::LParen, "Expected (")?;
+        let args = self.parse_expr_list()?;
+        self.expect(TokenKind::RParen, "Expected )")?;
+        Ok(Expr {
+            kind: ExprKind::EffectPerform(path, args),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs: Vec::new(),
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_effect_handle_expr(&mut self, start_span: Span) -> Result<Expr, Diagnostic> {
+        // handle expr with { ... }
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::Ident("with".to_string()), "Expected 'with'")?;
+        self.expect(TokenKind::LBrace, "Expected {")?;
+        let mut handlers = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.is_at_end() {
+            handlers.push(self.parse_effect_handler_arm()?);
+        }
+        self.expect(TokenKind::RBrace, "Expected }")?;
+        Ok(Expr {
+            kind: ExprKind::EffectHandle(Box::new(expr), handlers),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs: Vec::new(),
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_actor_spawn_expr(&mut self, start_span: Span) -> Result<Expr, Diagnostic> {
+        // spawn(expr)
+        self.expect(TokenKind::LParen, "Expected (")?;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::RParen, "Expected )")?;
+        Ok(Expr {
+            kind: ExprKind::ActorSpawn(Box::new(expr)),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs: Vec::new(),
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_actor_supervise_expr(&mut self, start_span: Span) -> Result<Expr, Diagnostic> {
+        // supervise(expr, spec)
+        self.expect(TokenKind::LParen, "Expected (")?;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::Comma, "Expected ,")?;
+        let spec = self.parse_supervision_spec()?;
+        self.expect(TokenKind::RParen, "Expected )")?;
+        Ok(Expr {
+            kind: ExprKind::ActorSupervise(Box::new(expr), spec),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs: Vec::new(),
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_comptime_expr(&mut self, start_span: Span) -> Result<Expr, Diagnostic> {
+        // comptime { ... }
+        let block = self.parse_block()?;
+        Ok(Expr {
+            kind: ExprKind::Comptime(Box::new(Expr {
+                kind: ExprKind::Block(block),
+                span: self.previous_span(),
+                attrs: Vec::new(),
+                node_id: self.next_node_id(),
+            })),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs: Vec::new(),
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_pipeline_stage_expr(&mut self) -> Result<PipelineStage, Diagnostic> {
+        let attrs = Vec::new();
+        let kind = if self.match_token(TokenKind::Ident("filter".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Filter(expr)
+        } else if self.match_token(TokenKind::Ident("map".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Map(expr)
+        } else if self.match_token(TokenKind::Ident("flat_map".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::FlatMap(expr)
+        } else if self.match_token(TokenKind::Ident("fold".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let init = self.parse_expr()?;
+            self.expect(TokenKind::Comma, "Expected ,")?;
+            let func = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Fold(init, func)
+        } else if self.match_token(TokenKind::Ident("reduce".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let func = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Reduce(func)
+        } else if self.match_token(TokenKind::Ident("collect".to_string())) {
+            let ty = if self.match_token(TokenKind::LParen) {
+                if self.check(TokenKind::RBracket) || self.check(TokenKind::Ident("".to_string())) {
+                    let ty = self.parse_type_expr()?;
+                    self.expect(TokenKind::RParen, "Expected )")?;
+                    Some(ty)
+                } else {
+                    self.expect(TokenKind::RParen, "Expected )")?;
+                    None
+                }
+            } else {
+                None
+            };
+            PipelineStageKind::Collect(ty)
+        } else if self.match_token(TokenKind::Ident("take".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Take(expr)
+        } else if self.match_token(TokenKind::Ident("skip".to_string())) {
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Skip(expr)
+        } else {
+            let ident = self.parse_ident()?;
+            self.expect(TokenKind::LParen, "Expected (")?;
+            let args = self.parse_expr_list()?;
+            self.expect(TokenKind::RParen, "Expected )")?;
+            PipelineStageKind::Custom(ident, args)
+        };
+        Ok(PipelineStage {
+            attrs,
+            kind,
+            span: self.previous_span(),
+        })
+    }
+
     fn parse_block_expr(&mut self, start_span: Span) -> Result<Expr, Diagnostic> {
         let block = self.parse_block_inner(start_span)?;
         Ok(Expr {
@@ -1877,6 +2411,17 @@ impl<'a> Parser<'a> {
         let attrs = self.parse_attributes()?;
         let start_span = self.current_span();
 
+        // NOVA Unique Features - Statements
+        if self.match_token(TokenKind::Ident("handle".to_string())) {
+            return self.parse_effect_handle_stmt(attrs, start_span);
+        }
+        if self.match_token(TokenKind::Ident("spawn".to_string())) {
+            return self.parse_actor_spawn_stmt(attrs, start_span);
+        }
+        if self.match_token(TokenKind::Ident("comptime".to_string())) {
+            return self.parse_comptime_stmt(attrs, start_span);
+        }
+
         if self.match_token(TokenKind::Let) {
             return self.parse_let_stmt(attrs, start_span);
         }
@@ -1886,7 +2431,8 @@ impl<'a> Parser<'a> {
            self.check(TokenKind::Trait) || self.check(TokenKind::Impl) || self.check(TokenKind::Type) ||
            self.check(TokenKind::Use) || self.check(TokenKind::Macro) || self.check(TokenKind::Pub) ||
            self.check(TokenKind::Async) || self.check(TokenKind::Unsafe) || self.check(TokenKind::Const) ||
-           self.check(TokenKind::Extern) {
+           self.check(TokenKind::Extern) || self.check(TokenKind::Effect) || self.check(TokenKind::Handle) ||
+           self.check(TokenKind::Actor) || self.check(TokenKind::Comptime) || self.check(TokenKind::Pipeline) {
             let item = self.parse_item()?;
             return Ok(Stmt { kind: StmtKind::Item(item), span: start_span, attrs, node_id: self.next_node_id() });
         }
@@ -1912,6 +2458,49 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Semi, "Expected ;")?;
         Ok(Stmt {
             kind: StmtKind::Let(LetStmt { mutability, pattern, ty, initializer, span: Span::new(self.file_id, start_span.start, self.previous_span().end) }),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs,
+            node_id: self.next_node_id(),
+        })
+    }
+
+    // NOVA Unique Features - Statement Parsing
+    fn parse_effect_handle_stmt(&mut self, attrs: Vec<Attribute>, start_span: Span) -> Result<Stmt, Diagnostic> {
+        // handle expr with { ... }
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::Ident("with".to_string()), "Expected 'with'")?;
+        self.expect(TokenKind::LBrace, "Expected {")?;
+        let mut handlers = Vec::new();
+        while !self.check(TokenKind::RBrace) && !self.is_at_end() {
+            handlers.push(self.parse_effect_handler_arm()?);
+        }
+        self.expect(TokenKind::RBrace, "Expected }")?;
+        Ok(Stmt {
+            kind: StmtKind::EffectHandle(Box::new(expr), handlers),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs,
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_actor_spawn_stmt(&mut self, attrs: Vec<Attribute>, start_span: Span) -> Result<Stmt, Diagnostic> {
+        // spawn expr;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::Semi, "Expected ;")?;
+        Ok(Stmt {
+            kind: StmtKind::ActorSpawn(Box::new(expr)),
+            span: Span::new(self.file_id, start_span.start, self.previous_span().end),
+            attrs,
+            node_id: self.next_node_id(),
+        })
+    }
+
+    fn parse_comptime_stmt(&mut self, attrs: Vec<Attribute>, start_span: Span) -> Result<Stmt, Diagnostic> {
+        // comptime { ... };
+        let block = self.parse_block()?;
+        self.expect(TokenKind::Semi, "Expected ;")?;
+        Ok(Stmt {
+            kind: StmtKind::Comptime(block),
             span: Span::new(self.file_id, start_span.start, self.previous_span().end),
             attrs,
             node_id: self.next_node_id(),

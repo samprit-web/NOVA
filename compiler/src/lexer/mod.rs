@@ -191,7 +191,6 @@ pub enum TokenKind {
     RBracket,
     LBrace,
     RBrace,
-    Pipe,
 
     // Special
     Eof,

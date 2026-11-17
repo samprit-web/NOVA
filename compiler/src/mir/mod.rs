@@ -9,7 +9,10 @@
 use std::collections::HashMap;
 
 use crate::{Span, FileId, NodeId, Type, GenericArg, GenericArgs};
-use crate::hir::{ItemId, VarId, Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, WhereClause, Lifetime, AttrStyle, Attribute, MetaItem};
+pub use crate::hir::{ItemId, VarId, Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, WhereClause, Lifetime, AttrStyle, Attribute, MetaItem};
+use crate::ast::{DurationExpr, TimeUnit, SupervisionStrategy, SupervisionSpec, PipelineStageKind};
+
+pub use crate::mir::lower::lower;
 
 /// MIR program
 #[derive(Debug, Clone)]
@@ -850,15 +853,15 @@ pub mod lower {
                     attrs: p.attrs,
                     name: p.name,
                     kind: match p.kind {
-                        hir::GenericParamKind::Type { bounds, default } => hir::GenericParamKind::Type {
+                        crate::ast::GenericParamKind::Type { bounds, default } => crate::ast::GenericParamKind::Type {
                             bounds: bounds.map(|b| self.lower_generic_bounds(b)),
                             default: default.map(|d| self.lower_type(d)),
                         },
-                        hir::GenericParamKind::Const { ty, default } => hir::GenericParamKind::Const {
+                        crate::ast::GenericParamKind::Const { ty, default } => crate::ast::GenericParamKind::Const {
                             ty: self.lower_type(ty),
                             default: default.map(|d| self.lower_expr(d)).ok().flatten(),
                         },
-                        hir::GenericParamKind::Lifetime => hir::GenericParamKind::Lifetime,
+                        crate::ast::GenericParamKind::Lifetime => crate::ast::GenericParamKind::Lifetime,
                     },
                     span: p.span,
                 }).collect(),
@@ -886,7 +889,7 @@ pub mod lower {
 
         fn lower_where_clause(&mut self, w: Option<hir::WhereClause>) -> WhereClause {
             w.map(|wc| WhereClause {
-                predicates: wc.predicates.into_iter().map(|p| hir::WherePredicate {
+                predicates: wc.predicates.into_iter().map(|p| crate::ast::WherePredicate {
                     ty: self.lower_type(p.ty),
                     bounds: self.lower_generic_bounds(p.bounds),
                     span: p.span,
