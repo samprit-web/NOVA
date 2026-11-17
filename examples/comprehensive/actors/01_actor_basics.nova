@@ -1,0 +1,283 @@
+// Example 1: Actor Model Basics
+// Demonstrates: actor definition, message passing, state management, lifecycle
+
+fn main() {
+    println!("=== Actor Model Basics ===\n")
+
+    use std::task::actor
+    use std::sync::channel
+    use std::time::Duration
+
+    // ===== BASIC ACTOR =====
+    println!("--- Basic Actor ---")
+
+    actor Counter {
+        count: i64 = 0
+
+        fn increment(&mut self) -> i64 {
+            self.count += 1
+            self.count
+        }
+
+        fn get(&self) -> i64 {
+            self.count
+        }
+
+        fn reset(&mut self) {
+            self.count = 0
+        }
+    }
+
+    let counter = Counter::new()
+
+    // Send messages (async)
+    let val1 = counter.increment().await
+    println!("  Increment 1: {}", val1)
+
+    let val2 = counter.increment().await
+    println!("  Increment 2: {}", val2)
+
+    let val3 = counter.increment().await
+    println!("  Increment 3: {}", val3)
+
+    // Read-only access
+    let current = counter.get().await
+    println!("  Current value: {}", current)
+
+    // Reset
+    counter.reset().await
+    println!("  After reset: {}", counter.get().await)
+
+    // ===== ACTOR WITH STATE =====
+    println!("\n--- Actor with Complex State ---")
+
+    actor BankAccount {
+        balance: i64 = 0
+        transactions: Vec<String> = Vec::new()
+
+        fn deposit(&mut self, amount: i64) -> Result<i64, String> {
+            if amount <= 0 {
+                return Err("Amount must be positive".to_string())
+            }
+            self.balance += amount
+            self.transactions.push(format!("Deposited {}", amount))
+            Ok(self.balance)
+        }
+
+        fn withdraw(&mut self, amount: i64) -> Result<i64, String> {
+            if amount <= 0 {
+                return Err("Amount must be positive".to_string())
+            }
+            if amount > self.balance {
+                return Err("Insufficient funds".to_string())
+            }
+            self.balance -= amount
+            self.transactions.push(format!("Withdrew {}", amount))
+            Ok(self.balance)
+        }
+
+        fn get_balance(&self) -> i64 {
+            self.balance
+        }
+
+        fn get_transactions(&self) -> Vec<String> {
+            self.transactions.clone()
+        }
+    }
+
+    let account = BankAccount::new()
+
+    println!("  Initial balance: {}", account.get_balance().await)
+
+    account.deposit(100).await
+    println!("  After deposit 100: {}", account.get_balance().await)
+
+    account.deposit(50).await
+    println!("  After deposit 50: {}", account.get_balance().await)
+
+    match account.withdraw(30).await {
+        Ok(bal) => println!("  After withdraw 30: {}", bal),
+        Err(e) => println!("  Error: {}", e),
+    }
+
+    match account.withdraw(200).await {
+        Ok(bal) => println!("  After withdraw 200: {}", bal),
+        Err(e) => println!("  Error (expected): {}", e),
+    }
+
+    println!("  Transactions: {:?}", account.get_transactions().await)
+
+    // ===== ACTOR WITH MULTIPLE METHODS =====
+    println!("\n--- Actor with Multiple Methods ---")
+
+    actor Calculator {
+        history: Vec<String> = Vec::new()
+
+        fn add(&mut self, a: i64, b: i64) -> i64 {
+            let result = a + b
+            self.history.push(format!("{} + {} = {}", a, b, result))
+            result
+        }
+
+        fn multiply(&mut self, a: i64, b: i64) -> i64 {
+            let result = a * b
+            self.history.push(format!("{} * {} = {}", a, b, result))
+            result
+        }
+
+        fn divide(&mut self, a: i64, b: i64) -> Result<i64, String> {
+            if b == 0 {
+                return Err("Division by zero".to_string())
+            }
+            let result = a / b
+            self.history.push(format!("{} / {} = {}", a, b, result))
+            Ok(result)
+        }
+
+        fn get_history(&self) -> Vec<String> {
+            self.history.clone()
+        }
+
+        fn clear_history(&mut self) {
+            self.history.clear()
+        }
+    }
+
+    let calc = Calculator::new()
+
+    println!("  10 + 5 = {}", calc.add(10, 5).await)
+    println!("  3 * 4 = {}", calc.multiply(3, 4).await)
+    println!("  20 / 4 = {:?}", calc.divide(20, 4).await)
+    println!("  10 / 0 = {:?}", calc.divide(10, 0).await)
+
+    println!("  History: {:?}", calc.get_history().await)
+
+    // ===== ACTOR COMMUNICATION =====
+    println!("\n--- Actor Communication ---")
+
+    actor Logger {
+        logs: Vec<String> = Vec::new()
+
+        fn log(&mut self, level: &str, message: String) {
+            let entry = format!("[{}] {}", level, message)
+            self.logs.push(entry)
+        }
+
+        fn info(&mut self, message: String) {
+            self.log("INFO", message)
+        }
+
+        fn error(&mut self, message: String) {
+            self.log("ERROR", message)
+        }
+
+        fn get_logs(&self) -> Vec<String> {
+            self.logs.clone()
+        }
+    }
+
+    actor Worker {
+        id: u32
+        logger: Logger
+        processed: u32 = 0
+
+        fn new(id: u32, logger: Logger) -> Self {
+            Worker { id, logger, processed: 0 }
+        }
+
+        fn process(&mut self, item: String) -> String {
+            self.processed += 1
+            self.logger.info(format!("Worker {} processing: {}", self.id, item)).await
+            format!("Processed by worker {}: {}", self.id, item)
+        }
+
+        fn get_stats(&self) -> (u32, u32) {
+            (self.id, self.processed)
+        }
+    }
+
+    let logger = Logger::new()
+    let worker1 = Worker::new(1, logger.clone())
+    let worker2 = Worker::new(2, logger.clone())
+
+    println!("  Worker 1: {:?}", worker1.process("task1").await)
+    println!("  Worker 2: {:?}", worker2.process("task2").await)
+    println!("  Worker 1: {:?}", worker1.process("task3").await)
+
+    println!("  Worker 1 stats: {:?}", worker1.get_stats().await)
+    println!("  Worker 2 stats: {:?}", worker2.get_stats().await)
+    println!("  Logs: {:?}", logger.get_logs().await)
+
+    // ===== ACTOR SUPERVISION =====
+    println!("\n--- Actor Supervision ---")
+
+    actor Supervisor {
+        children: Vec<ActorRef<Worker>> = Vec::new()
+
+        fn add_worker(&mut self, worker: ActorRef<Worker>) {
+            self.children.push(worker)
+        }
+
+        fn restart_all(&mut self) {
+            for worker in &self.children {
+                worker.restart().await
+            }
+        }
+    }
+
+    // ===== ACTOR LIFECYCLE =====
+    println!("\n--- Actor Lifecycle ---")
+
+    actor LifecycleDemo {
+        name: String
+        started: bool = false
+
+        fn new(name: String) -> Self {
+            println!("  {}: Creating actor", name)
+            LifecycleDemo { name, started: false }
+        }
+
+        async fn on_start(&mut self) {
+            println!("  {}: Starting", self.name)
+            self.started = true
+        }
+
+        async fn on_stop(&mut self) {
+            println!("  {}: Stopping", self.name)
+        }
+
+        fn do_work(&self) -> String {
+            format!("{} working", self.name)
+        }
+    }
+
+    let actor = LifecycleDemo::new("TestActor".to_string())
+    println!("  Created: {}", actor.do_work().await)
+
+    // ===== DISTRIBUTED ACTORS (CONCEPTUAL) =====
+    println!("\n--- Distributed Actors (Conceptual) ---")
+
+    #[derive(Clone)]
+    struct ActorRef<T> {
+        id: u64,
+        _phantom: std::marker::PhantomData<T>,
+    }
+
+    impl<T> ActorRef<T> {
+        fn new(id: u64) -> Self {
+            ActorRef { id, _phantom: std::marker::PhantomData }
+        }
+
+        async fn send<M>(&self, msg: M) -> Result<(), String>
+        where M: Send + 'static {
+            // In real implementation, would serialize and send over network
+            println!("  Sending message to actor {}: {:?}", self.id, std::any::type_name::<M>())
+            Ok(())
+        }
+    }
+
+    let remote_actor = ActorRef::<Counter>::new(42)
+    println!("  Remote actor ref: {:?}", remote_actor)
+
+    println!("\n✅ Actor Model Basics example completed!")
+}

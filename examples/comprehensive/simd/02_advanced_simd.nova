@@ -1,0 +1,286 @@
+// Example 2: Advanced SIMD
+// Demonstrates: algorithm vectorization, matrix operations, image processing, intrinsics
+
+fn main() {
+    println!("=== Advanced SIMD ===\n")
+
+    use std::simd::{f32x4, f32x8, i32x4, Mask, Simd, LaneCount, SupportedLaneCount}
+
+    // ===== VECTORIZED ALGORITHMS =====
+    println!("--- Vectorized Algorithms ---")
+
+    // Dot product
+    fn dot_product(a: &[f32], b: &[f32]) -> f32 {
+        assert_eq!(a.len(), b.len())
+        let mut sum = f32x4::splat(0.0)
+        let chunks = a.chunks_exact(4).zip(b.chunks_exact(4))
+
+        for (ca, cb) in chunks {
+            let va = f32x4::from_slice(ca)
+            let vb = f32x4::from_slice(cb)
+            sum += va * vb
+        }
+
+        let mut result = sum.reduce_sum()
+
+        // Handle remainder
+        for (a, b) in a.chunks_exact(4).remainder().iter().zip(b.chunks_exact(4).remainder()) {
+            result += a * b
+        }
+
+        result
+    }
+
+    let a = vec![1.0, 2.0, 3.0, 4.0, 5.0]
+    let b = vec![2.0, 3.0, 4.0, 5.0, 6.0]
+    println!("  Dot product: {}", dot_product(&a, &b))
+
+    // Sum of squares
+    fn sum_of_squares(data: &[f32]) -> f32 {
+        let mut sum = f32x4::splat(0.0)
+        for chunk in data.chunks_exact(4) {
+            let v = f32x4::from_slice(chunk)
+            sum += v * v
+        }
+        let mut result = sum.reduce_sum()
+        for x in data.chunks_exact(4).remainder() {
+            result += x * x
+        }
+        result
+    }
+
+    println!("  Sum of squares: {}", sum_of_squares(&a))
+
+    // ===== MATRIX OPERATIONS =====
+    println!("\n--- Matrix Operations ---")
+
+    #[derive(Clone)]
+    struct Mat4 {
+        cols: [f32x4; 4],
+    }
+
+    impl Mat4 {
+        fn identity() -> Self {
+            Mat4 {
+                cols: [
+                    f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
+                    f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
+                    f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
+                    f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
+                ],
+            }
+        }
+
+        fn mul_vec(&self, v: f32x4) -> f32x4 {
+            // Matrix-vector multiplication
+            self.cols[0] * v.splat(0) +
+            self.cols[1] * v.splat(1) +
+            self.cols[2] * v.splat(2) +
+            self.cols[3] * v.splat(3)
+        }
+
+        fn mul_mat(&self, other: &Mat4) -> Mat4 {
+            let mut result = Mat4::identity()
+            for i in 0..4 {
+                let col = other.cols[i]
+                result.cols[i] = self.mul_vec(col)
+            }
+            result
+        }
+    }
+
+    let m1 = Mat4::identity()
+    let v = f32x4::from_array([1.0, 2.0, 3.0, 4.0])
+    let result = m1.mul_vec(v)
+    println!("  Mat4 * vec: {:?}", result.to_array())
+
+    // ===== IMAGE PROCESSING =====
+    println!("\n--- Image Processing ---")
+
+    // Grayscale conversion (RGB -> Gray)
+    fn rgb_to_gray(rgb: &[u8], width: usize, height: usize) -> Vec<u8> {
+        let mut gray = vec![0u8; width * height]
+        let coeff_r = 0.299f32
+        let coeff_g = 0.587f32
+        let coeff_b = 0.114f32
+
+        for y in 0..height {
+            for x in (0..width).step_by(4) {
+                if x + 3 < width {
+                    let base = (y * width + x) * 3
+                    let r = f32x4::from_array([
+                        rgb[base] as f32,
+                        rgb[base + 3] as f32,
+                        rgb[base + 6] as f32,
+                        rgb[base + 9] as f32,
+                    ])
+                    let g = f32x4::from_array([
+                        rgb[base + 1] as f32,
+                        rgb[base + 4] as f32,
+                        rgb[base + 7] as f32,
+                        rgb[base + 10] as f32,
+                    ])
+                    let b = f32x4::from_array([
+                        rgb[base + 2] as f32,
+                        rgb[base + 5] as f32,
+                        rgb[base + 8] as f32,
+                        rgb[base + 11] as f32,
+                    ])
+
+                    let gray_vec = r * coeff_r + g * coeff_g + b * coeff_b
+                    let gray_arr = gray_vec.cast::<u32>().to_array()
+
+                    gray[y * width + x] = gray_arr[0] as u8
+                    gray[y * width + x + 1] = gray_arr[1] as u8
+                    gray[y * width + x + 2] = gray_arr[2] as u8
+                    gray[y * width + x + 3] = gray_arr[3] as u8
+                }
+            }
+        }
+        gray
+    }
+
+    // Simple 2x2 RGB image
+    let rgb = vec![
+        255, 0, 0,    // Red
+        0, 255, 0,    // Green
+        0, 0, 255,    // Blue
+        255, 255, 255, // White
+    ]
+    let gray = rgb_to_gray(&rgb, 2, 2)
+    println!("  Grayscale: {:?}", gray)
+
+    // ===== CONVOLUTION / FILTERS =====
+    println!("\n--- Convolution ---")
+
+    // 3x3 Box blur
+    fn box_blur(input: &[f32], width: usize, height: usize) -> Vec<f32> {
+        let mut output = vec![0.0f32; width * height]
+        let kernel = [1.0f32/9.0; 9]
+
+        for y in 1..height-1 {
+            for x in 1..width-1 {
+                let mut sum = 0.0
+                for ky in -1..=1 {
+                    for kx in -1..=1 {
+                        let idx = (y + ky) * width + (x + kx)
+                        sum += input[idx] * kernel[((ky + 1) * 3 + (kx + 1)) as usize]
+                    }
+                }
+                output[y * width + x] = sum
+            }
+        }
+        output
+    }
+
+    // Vectorized version would use SIMD for 4 pixels at once
+    println!("  Convolution pattern shown")
+
+    // ===== TRANSCENDENTAL FUNCTIONS =====
+    println!("\n--- Transcendental Functions ---")
+
+    // Fast approximate math
+    fn fast_exp(x: f32x4) -> f32x4 {
+        // Approximate exp using polynomial
+        // exp(x) ≈ 1 + x + x²/2 + x³/6 + x⁴/24
+        let one = f32x4::splat(1.0)
+        let x2 = x * x
+        let x3 = x2 * x
+        let x4 = x2 * x2
+        one + x + x2 * f32x4::splat(0.5) + x3 * f32x4::splat(1.0/6.0) + x4 * f32x4::splat(1.0/24.0)
+    }
+
+    let vals = f32x4::from_array([0.0, 0.5, 1.0, 2.0])
+    let exp_vals = fast_exp(vals)
+    println!("  Fast exp: {:?}", exp_vals.to_array())
+    println!("  Actual:   [{:.4}, {:.4}, {:.4}, {:.4}]",
+        1.0_f32.exp(), 0.5_f32.exp(), 1.0_f32.exp(), 2.0_f32.exp())
+
+    // ===== INTRINSICS =====
+    println!("\n--- Platform Intrinsics ---")
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        use std::arch::x86_64::*;
+
+        // AVX2 intrinsics
+        #[cfg(target_feature = "avx2")]
+        unsafe {
+            let a = _mm256_set_ps(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+            let b = _mm256_set_ps(8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0)
+            let c = _mm256_add_ps(a, b)
+            println!("  AVX2 add_ps: {:?}", std::slice::from_raw_parts(&c as *const _ as *const f32, 8))
+        }
+
+        // SSE intrinsics
+        #[cfg(target_feature = "sse")]
+        unsafe {
+            let a = _mm_set_ps(1.0, 2.0, 3.0, 4.0)
+            let b = _mm_set_ps(4.0, 3.0, 2.0, 1.0)
+            let c = _mm_add_ps(a, b)
+            println!("  SSE add_ps: {:?}", std::slice::from_raw_parts(&c as *const _ as *const f32, 4))
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        use std::arch::aarch64::*;
+
+        // NEON intrinsics
+        #[cfg(target_feature = "neon")]
+        unsafe {
+            let a = float32x4_t::new(1.0, 2.0, 3.0, 4.0)
+            let b = float32x4_t::new(4.0, 3.0, 2.0, 1.0)
+            let c = vaddq_f32(a, b)
+            println!("  NEON vaddq_f32: {:?}", [c.get(0), c.get(1), c.get(2), c.get(3)])
+        }
+    }
+
+    // ===== AUTO-VECTORIZATION HINTS =====
+    println!("\n--- Auto-vectorization Hints ---")
+
+    // Use #[inline] and simple loops
+    #[inline]
+    fn vectorizable_sum(data: &[f32]) -> f32 {
+        let mut sum = 0.0
+        for &x in data {
+            sum += x
+        }
+        sum
+    }
+
+    // Avoid:
+    // - Complex control flow
+    // - Function calls in loop
+    // - Aliasing pointers
+    // - Non-unit strides
+
+    println!("  Hints shown")
+
+    // ===== PERFORMANCE MEASUREMENT =====
+    println!("\n--- Performance Measurement ---")
+
+    use std::time::Instant
+
+    let data: Vec<f32> = (0..10000).map(|x| x as f32).collect()
+
+    // Scalar
+    let start = Instant::now()
+    let scalar_sum: f32 = data.iter().sum()
+    let scalar_time = start.elapsed()
+
+    // SIMD
+    let start = Instant::now()
+    let mut simd_sum = f32x4::splat(0.0)
+    for chunk in data.chunks_exact(4) {
+        simd_sum += f32x4::from_slice(chunk)
+    }
+    let simd_sum = simd_sum.reduce_sum()
+    let simd_time = start.elapsed()
+
+    println!("  Scalar: {:?} = {}", scalar_time, scalar_sum)
+    println!("  SIMD:   {:?} = {}", simd_time, simd_sum)
+    println!("  Speedup: {:.2}x", scalar_time.as_nanos() as f64 / simd_time.as_nanos() as f64)
+
+    println!("\n✅ Advanced SIMD example completed!")
+}

@@ -8,6 +8,7 @@ pub mod hir;
 pub mod lexer;
 pub mod mir;
 pub mod parser;
+pub mod parser_gen;
 pub mod codegen;
 pub mod optimizer;
 pub mod vm;

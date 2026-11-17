@@ -1,0 +1,275 @@
+// Example 1: Structs, Enums, and Tuples
+// Demonstrates: struct definitions, enum variants, tuple types, methods, associated functions
+
+fn main() {
+    println!("=== Structs, Enums, Tuples ===\n")
+
+    // ===== STRUCT DEFINITIONS =====
+
+    // Unit struct (no fields)
+    struct UnitStruct;
+
+    // Tuple struct (unnamed fields)
+    struct Color(u8, u8, u8);
+    struct Point2D(f64, f64);
+
+    // Regular struct (named fields)
+    struct Person {
+        name: String,
+        age: u32,
+        email: String,
+    }
+
+    // Struct with generic parameters
+    struct Container<T> {
+        value: T,
+    }
+
+    // ===== STRUCT INSTANTIATION =====
+    let unit = UnitStruct;
+    let red = Color(255, 0, 0);
+    let origin = Point2D(0.0, 0.0);
+
+    let person = Person {
+        name: String::from("Alice"),
+        age: 30,
+        email: String::from("alice@example.com"),
+    }
+
+    let container = Container { value: 42 };
+    let string_container = Container { value: String::from("hello") };
+
+    println!("Unit: {:?}", unit)
+    println!("Color: ({}, {}, {})", red.0, red.1, red.2)
+    println!("Point: ({}, {})", origin.0, origin.1)
+    println!("Person: {} ({}), {}", person.name, person.age, person.email)
+    println!("Container: {}", container.value)
+    println!("StringContainer: {}", string_container.value)
+
+    // ===== STRUCT UPDATE SYNTAX =====
+    let person2 = Person {
+        name: String::from("Bob"),
+        ..person  // copy remaining fields from person
+    }
+    println!("Person2: {} ({}), {}", person2.name, person2.age, person2.email)
+
+    // ===== TUPLE STRUCT ACCESS =====
+    let Point2D(x, y) = origin;  // destructuring
+    println!("Destructured point: x={}, y={}", x, y)
+
+    // ===== METHODS ON STRUCTS =====
+    impl Point2D {
+        fn new(x: f64, y: f64) -> Self {
+            Point2D(x, y)
+        }
+
+        fn distance_from_origin(&self) -> f64 {
+            (self.0 * self.0 + self.1 * self.1).sqrt()
+        }
+
+        fn distance_to(&self, other: &Point2D) -> f64 {
+            let dx = self.0 - other.0
+            let dy = self.1 - other.1
+            (dx * dx + dy * dy).sqrt()
+        }
+
+        fn translate(&mut self, dx: f64, dy: f64) {
+            self.0 += dx
+            self.1 += dy
+        }
+
+        // Associated function (no self)
+        fn origin() -> Self {
+            Point2D(0.0, 0.0)
+        }
+    }
+
+    let p1 = Point2D::new(3.0, 4.0)
+    let p2 = Point2D::new(6.0, 8.0)
+
+    println!("p1 distance from origin: {}", p1.distance_from_origin())
+    println!("p1 to p2 distance: {}", p1.distance_to(&p2))
+
+    let mut p3 = Point2D::origin()
+    p3.translate(1.0, 2.0)
+    println!("p3 after translate: ({}, {})", p3.0, p3.1)
+
+    // ===== ENUM DEFINITIONS =====
+
+    // Simple enum (C-like)
+    enum Direction {
+        North,
+        South,
+        East,
+        West,
+    }
+
+    // Enum with data (variants with different types)
+    enum Shape {
+        Circle(f64),                    // radius
+        Rectangle(f64, f64),            // width, height
+        Triangle(f64, f64, f64),        // three sides
+        // Unit variant
+        Point,
+    }
+
+    // Enum with named fields
+    enum Event {
+        Click { x: i32, y: i32 },
+        KeyPress(char),
+        Resize { width: u32, height: u32 },
+        Quit,
+    }
+
+    // Generic enum
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+
+    // Option (built-in, but showing structure)
+    enum Option<T> {
+        Some(T),
+        None,
+    }
+
+    // ===== ENUM USAGE =====
+    let dir = Direction::North
+    println!("Direction: {:?}", dir)
+
+    let circle = Shape::Circle(5.0)
+    let rect = Shape::Rectangle(10.0, 20.0)
+    let point = Shape::Point
+
+    // Match on enum
+    fn describe_shape(shape: &Shape) -> String {
+        match shape {
+            Shape::Circle(r) => format!("Circle with radius {}", r),
+            Shape::Rectangle(w, h) => format!("Rectangle {}x{}", w, h),
+            Shape::Triangle(a, b, c) => format!("Triangle sides {}, {}, {}", a, b, c),
+            Shape::Point => "Point".to_string(),
+        }
+    }
+
+    println!("Shape: {}", describe_shape(&circle))
+    println!("Shape: {}", describe_shape(&rect))
+    println!("Shape: {}", describe_shape(&point))
+
+    // Enum with named fields
+    let click = Event::Click { x: 100, y: 200 }
+    let key = Event::KeyPress('A')
+
+    match click {
+        Event::Click { x, y } => println!("Clicked at ({}, {})", x, y),
+        _ => {}
+    }
+
+    // ===== METHODS ON ENUMS =====
+    impl Shape {
+        fn area(&self) -> f64 {
+            match self {
+                Shape::Circle(r) => std::f64::consts::PI * r * r,
+                Shape::Rectangle(w, h) => w * h,
+                Shape::Triangle(a, b, c) => {
+                    let s = (a + b + c) / 2.0
+                    (s * (s - a) * (s - b) * (s - c)).sqrt()
+                }
+                Shape::Point => 0.0,
+            }
+        }
+
+        fn name(&self) -> &'static str {
+            match self {
+                Shape::Circle(_) => "Circle",
+                Shape::Rectangle(_, _) => "Rectangle",
+                Shape::Triangle(_, _, _) => "Triangle",
+                Shape::Point => "Point",
+            }
+        }
+    }
+
+    println!("Circle area: {}", circle.area())
+    println!("Rect area: {}", rect.area())
+    println!("Shape name: {}", circle.name())
+
+    // ===== TUPLES =====
+    println!("\n--- Tuples ---")
+
+    // Tuple types
+    let simple_tuple = (1, 2, 3)
+    let mixed_tuple = (42, "hello", 3.14, true)
+    let nested_tuple = ((1, 2), (3, 4))
+
+    println!("Simple: {:?}", simple_tuple)
+    println!("Mixed: {:?}", mixed_tuple)
+    println!("Nested: {:?}", nested_tuple)
+
+    // Tuple access
+    println!("First: {}", simple_tuple.0)
+    println!("Second: {}", simple_tuple.1)
+    println!("Third: {}", simple_tuple.2)
+
+    // Tuple destructuring
+    let (a, b, c) = simple_tuple
+    println!("Destructured: a={}, b={}, c={}", a, b, c)
+
+    // Partial destructuring
+    let (first, ..) = mixed_tuple
+    println!("First of mixed: {}", first)
+
+    // Tuple as return type
+    fn min_max(numbers: &[i32]) -> (i32, i32) {
+        let mut min = numbers[0]
+        let mut max = numbers[0]
+        for &n in numbers {
+            if n < min { min = n }
+            if n > max { max = n }
+        }
+        (min, max)
+    }
+
+    let (min, max) = min_max(&[3, 1, 4, 1, 5, 9, 2, 6])
+    println!("Min/Max: min={}, max={}", min, max)
+
+    // Unit tuple
+    let empty: () = ()
+    println!("Unit tuple: {:?}", empty)
+
+    // Single element tuple (trailing comma required)
+    let single = (42,)
+    println!("Single tuple: {:?}, first: {}", single, single.0)
+
+    // ===== PATTERN MATCHING ON TUPLES =====
+    let pair = (10, 20)
+
+    match pair {
+        (0, 0) => println!("Origin"),
+        (x, 0) => println!("On x-axis: {}", x),
+        (0, y) => println!("On y-axis: {}", y),
+        (x, y) => println!("Point ({}, {})", x, y),
+    }
+
+    // ===== STRUCT WITH ENUM FIELDS =====
+    struct GameState {
+        player: Player,
+        status: GameStatus,
+    }
+
+    enum Player {
+        Human { name: String },
+        AI { difficulty: u8 },
+    }
+
+    enum GameStatus {
+        Playing,
+        Paused,
+        Finished { winner: Option<Player> },
+    }
+
+    let state = GameState {
+        player: Player::Human { name: String::from("Alice") },
+        status: GameStatus::Playing,
+    }
+
+    println!("\n✅ Structs, Enums, Tuples example completed!")
+}

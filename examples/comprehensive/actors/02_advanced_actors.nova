@@ -1,0 +1,354 @@
+// Example 2: Advanced Actor Patterns
+// Demonstrates: actor hierarchies, pub/sub, routing, persistence, clustering
+
+fn main() {
+    println!("=== Advanced Actor Patterns ===\n")
+
+    use std::task::actor
+    use std::sync::{Arc, Mutex}
+    use std::collections::HashMap
+    use std::time::Duration
+
+    // ===== ACTOR HIERARCHY =====
+    println!("--- Actor Hierarchy ---")
+
+    actor RootSupervisor {
+        children: HashMap<String, ActorRef<dyn Actor>> = HashMap::new()
+
+        fn add_child(&mut self, name: String, child: ActorRef<dyn Actor>) {
+            self.children.insert(name, child)
+        }
+
+        fn get_child(&self, name: &str) -> Option<ActorRef<dyn Actor>> {
+            self.children.get(name).cloned()
+        }
+
+        fn restart_child(&mut self, name: &str) {
+            if let Some(child) = self.children.get(name) {
+                child.restart().await
+            }
+        }
+    }
+
+    actor Worker {
+        id: u32
+        supervisor: ActorRef<RootSupervisor>
+
+        fn new(id: u32, supervisor: ActorRef<RootSupervisor>) -> Self {
+            Worker { id, supervisor }
+        }
+
+        fn do_work(&mut self, task: String) -> String {
+            format!("Worker {} completed: {}", self.id, task)
+        }
+
+        fn crash(&mut self) {
+            panic!("Intentional crash!")
+        }
+    }
+
+    // ===== PUB/SUB PATTERN =====
+    println!("--- Pub/Sub Pattern ---")
+
+    actor EventBus {
+        subscribers: HashMap<String, Vec<ActorRef<dyn Subscriber>>> = HashMap::new()
+
+        fn subscribe(&mut self, topic: String, subscriber: ActorRef<dyn Subscriber>) {
+            self.subscribers.entry(topic).or_default().push(subscriber)
+        }
+
+        fn unsubscribe(&mut self, topic: &str, subscriber: &ActorRef<dyn Subscriber>) {
+            if let Some(subs) = self.subscribers.get_mut(topic) {
+                subs.retain(|s| s.id() != subscriber.id())
+            }
+        }
+
+        fn publish(&mut self, topic: String, message: String) {
+            if let Some(subs) = self.subscribers.get(&topic) {
+                for sub in subs {
+                    sub.on_message(topic.clone(), message.clone()).await
+                }
+            }
+        }
+    }
+
+    trait Subscriber: Actor {
+        fn on_message(&mut self, topic: String, message: String)
+        fn id(&self) -> u64
+    }
+
+    actor LoggerSubscriber {
+        id: u64 = 0
+        name: String
+
+        fn new(name: String) -> Self {
+            LoggerSubscriber { id: rand::random(), name }
+        }
+
+        fn on_message(&mut self, topic: String, message: String) {
+            println!("  [{}] {}: {}", self.name, topic, message)
+        }
+
+        fn id(&self) -> u64 { self.id }
+    }
+
+    // ===== ROUTING PATTERNS =====
+    println!("--- Routing Patterns ---")
+
+    actor Router {
+        routes: HashMap<String, ActorRef<dyn Handler>> = HashMap::new()
+
+        fn add_route(&mut self, path: String, handler: ActorRef<dyn Handler>) {
+            self.routes.insert(path, handler)
+        }
+
+        fn route(&mut self, path: String, payload: String) -> Result<String, String> {
+            self.routes.get(&path)
+                .map(|h| h.handle(payload).await)
+                .ok_or_else(|| "No route found".to_string())
+        }
+    }
+
+    trait Handler: Actor {
+        fn handle(&mut self, payload: String) -> String
+    }
+
+    actor EchoHandler {
+        fn handle(&mut self, payload: String) -> String {
+            format!("Echo: {}", payload)
+        }
+    }
+
+    actor TransformHandler {
+        fn handle(&mut self, payload: String) -> String {
+            payload.to_uppercase()
+        }
+    }
+
+    // ===== ACTOR PERSISTENCE =====
+    println!("--- Actor Persistence ---")
+
+    actor PersistentCounter {
+        count: i64 = 0
+        snapshot_interval: u32 = 10
+        operations_since_snapshot: u32 = 0
+        storage: ActorRef<Storage>
+
+        fn increment(&mut self) -> i64 {
+            self.count += 1
+            self.operations_since_snapshot += 1
+            if self.operations_since_snapshot >= self.snapshot_interval {
+                self.save_snapshot().await
+                self.operations_since_snapshot = 0
+            }
+            self.count
+        }
+
+        async fn save_snapshot(&mut self) {
+            self.storage.save("counter", self.count).await
+            println!("  Snapshot saved: {}", self.count)
+        }
+
+        async fn recover(&mut self) {
+            if let Some(saved) = self.storage.load("counter").await {
+                self.count = saved
+                println!("  Recovered: {}", self.count)
+            }
+        }
+    }
+
+    actor Storage {
+        data: HashMap<String, i64> = HashMap::new()
+
+        fn save(&mut self, key: String, value: i64) {
+            self.data.insert(key, value)
+        }
+
+        fn load(&self, key: String) -> Option<i64> {
+            self.data.get(&key).copied()
+        }
+    }
+
+    // ===== ACTOR CLUSTERING (CONCEPTUAL) =====
+    println!("--- Actor Clustering ---")
+
+    struct NodeInfo {
+        id: String
+        address: String
+        actors: Vec<String>
+    }
+
+    actor ClusterManager {
+        nodes: HashMap<String, NodeInfo> = HashMap::new()
+        local_node: String
+
+        fn new(node_id: String) -> Self {
+            ClusterManager {
+                local_node: node_id.clone(),
+                nodes: HashMap::new(),
+            }
+        }
+
+        fn register_node(&mut self, info: NodeInfo) {
+            self.nodes.insert(info.id.clone(), info)
+        }
+
+        fn get_node(&self, id: &str) -> Option<NodeInfo> {
+            self.nodes.get(id).cloned()
+        }
+
+        fn find_actor(&self, actor_type: &str) -> Vec<String> {
+            self.nodes.values()
+                .filter(|n| n.actors.contains(&actor_type.to_string()))
+                .map(|n| n.id.clone())
+                .collect()
+        }
+    }
+
+    // ===== ASK PATTERN (REQUEST-RESPONSE) =====
+    println!("--- Ask Pattern ---")
+
+    actor AskableActor {
+        data: String = "initial".to_string()
+
+        fn ask(&mut self, query: String) -> String {
+            format!("Response to '{}': {}", query, self.data)
+        }
+
+        fn tell(&mut self, command: String) {
+            self.data = command
+        }
+    }
+
+    let askable = AskableActor::new()
+
+    let response = askable.ask("What is your data?".to_string()).await
+    println!("  Ask response: {}", response)
+
+    askable.tell("updated".to_string()).await
+    let response2 = askable.ask("Now what?".to_string()).await
+    println!("  Ask response after tell: {}", response2)
+
+    // ===== FORWARDING AND DELEGATION =====
+    println!("--- Forwarding and Delegation ---")
+
+    actor Frontend {
+        backend: ActorRef<Backend>
+
+        fn new(backend: ActorRef<Backend>) -> Self {
+            Frontend { backend }
+        }
+
+        fn handle_request(&mut self, request: String) -> String {
+            // Forward to backend
+            self.backend.process(request).await
+        }
+    }
+
+    actor Backend {
+        fn process(&mut self, request: String) -> String {
+            format!("Backend processed: {}", request)
+        }
+    }
+
+    let backend = Backend::new()
+    let frontend = Frontend::new(backend)
+
+    println!("  Frontend -> Backend: {}", frontend.handle_request("hello".to_string()).await)
+
+    // ===== ACTOR METRICS =====
+    println!("--- Actor Metrics ---")
+
+    actor MetricsCollector {
+        metrics: HashMap<String, u64> = HashMap::new()
+
+        fn increment(&mut self, name: String) {
+            *self.metrics.entry(name).or_insert(0) += 1
+        }
+
+        fn get(&self, name: &str) -> u64 {
+            self.metrics.get(name).copied().unwrap_or(0)
+        }
+
+        fn all(&self) -> HashMap<String, u64> {
+            self.metrics.clone()
+        }
+    }
+
+    actor InstrumentedActor {
+        metrics: ActorRef<MetricsCollector>
+        name: String
+
+        fn new(name: String, metrics: ActorRef<MetricsCollector>) -> Self {
+            InstrumentedActor { name, metrics }
+        }
+
+        fn do_work(&mut self, work: String) -> String {
+            self.metrics.increment(format!("{}.calls", self.name)).await
+            let start = std::time::Instant::now()
+            let result = format!("{} done", work)
+            let elapsed = start.elapsed().as_millis() as u64
+            self.metrics.increment(format!("{}.latency_ms", self.name)).await
+            result
+        }
+    }
+
+    let metrics = MetricsCollector::new()
+    let instrumented = InstrumentedActor::new("worker".to_string(), metrics)
+
+    for i in 0..5 {
+        instrumented.do_work(format!("task{}", i)).await
+    }
+
+    println!("  Metrics: {:?}", metrics.all().await)
+
+    // ===== ACTOR TESTING =====
+    println!("--- Actor Testing ---")
+
+    struct TestProbe {
+        received: Mutex<Vec<String>>
+    }
+
+    impl TestProbe {
+        fn new() -> Self {
+            TestProbe { received: Mutex::new(Vec::new()) }
+        }
+
+        fn expect_msg(&self, expected: &str, timeout: Duration) -> bool {
+            let start = std::time::Instant::now()
+            while start.elapsed() < timeout {
+                let msgs = self.received.lock().unwrap()
+                if msgs.iter().any(|m| m == expected) {
+                    return true
+                }
+                std::thread::sleep(Duration::from_millis(10))
+            }
+            false
+        }
+    }
+
+    println!("  Test probe pattern demonstrated (conceptual)")
+
+    println!("\n✅ Advanced Actor Patterns example completed!")
+}
+
+// Simplified ActorRef for examples
+struct ActorRef<T> {
+    id: u64,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> ActorRef<T> {
+    fn new() -> Self { ActorRef { id: rand::random(), _phantom: std::marker::PhantomData } }
+    fn id(&self) -> u64 { self.id }
+    async fn send<M>(&self, _msg: M) -> Result<(), String> where M: Send { Ok(()) }
+    async fn restart(&self) { println!("  Restarting actor {}", self.id) }
+}
+
+trait Actor: Send + Sync {}
+
+mod rand {
+    use std::sync::atomic::{AtomicU64, Ordering}
+    static COUNTER: AtomicU64 = AtomicU64::new(1)
+    pub fn random() -> u64 { COUNTER.fetch_add(1, Ordering::Relaxed) }
+}

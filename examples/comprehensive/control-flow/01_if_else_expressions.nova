@@ -1,0 +1,129 @@
+// Example 1: If/Else Expressions
+// Demonstrates: if as expression, else if chains, ternary-like usage, block expressions
+
+fn main() {
+    println!("=== If/Else Expressions ===\n")
+
+    // ===== BASIC IF/ELSE =====
+    let number = 42
+
+    if number > 0 {
+        println!("Positive: {}", number)
+    } else if number < 0 {
+        println!("Negative: {}", number)
+    } else {
+        println!("Zero")
+    }
+
+    // ===== IF AS EXPRESSION (returns value) =====
+    let result = if number % 2 == 0 {
+        "even"
+    } else {
+        "odd"
+    }
+    println!("If expression result: {} is {}", number, result)
+
+    // ===== INLINE IF EXPRESSION =====
+    let status = if number > 50 { "big" } else { "small" }
+    println!("Inline: {} is {}", number, status)
+
+    // ===== COMPLEX CONDITIONS =====
+    let age = 25
+    let has_license = true
+
+    let can_drive = if age >= 18 && has_license {
+        "yes"
+    } else if age >= 18 && !has_license {
+        "needs license"
+    } else {
+        "too young"
+    }
+    println!("Can drive: {}", can_drive)
+
+    // ===== NESTED IF =====
+    let score = 85
+
+    let grade = if score >= 90 {
+        "A"
+    } else if score >= 80 {
+        if score >= 85 { "B+" } else { "B" }
+    } else if score >= 70 {
+        "C"
+    } else {
+        "F"
+    }
+    println!("Score {} -> Grade {}", score, grade)
+
+    // ===== IF WITH BLOCKS =====
+    let x = 10
+    let y = 20
+
+    // If block with multiple statements
+    let max = if x > y {
+        println!("x is greater");
+        x
+    } else {
+        println!("y is greater or equal");
+        y
+    }
+    println!("Max of {} and {} is {}", x, y, max)
+
+    // ===== IF LET PATTERN (with pattern matching) =====
+    let some_value = Some(42)
+
+    if let Some(val) = some_value {
+        println!("Got value: {}", val)
+    } else {
+        println!("No value")
+    }
+
+    // ===== MATCH-LIKE IF WITH MULTIPLE CONDITIONS =====
+    let temperature = 22
+
+    let weather = if temperature > 30 {
+        "hot"
+    } else if temperature > 20 {
+        "warm"
+    } else if temperature > 10 {
+        "cool"
+    } else if temperature > 0 {
+        "cold"
+    } else {
+        "freezing"
+    }
+    println!("Temperature {}°C is {}", temperature, weather)
+
+    // ===== IF WITH EARLY RETURN =====
+    fn check_positive(n: i32) -> String {
+        if n <= 0 {
+            return "not positive".to_string()  // explicit return
+        }
+        // implicit return if not returned
+        "positive".to_string()
+    }
+
+    println!("check_positive(5): {}", check_positive(5))
+    println!("check_positive(-3): {}", check_positive(-3))
+
+    // ===== IF IN LET BINDING =====
+    let condition = true
+    let value = if condition { 100 } else { 200 }
+    println!("Conditional binding: {}", value)
+
+    // ===== MATCHING OPTION WITH IF LET =====
+    let maybe_name: Option<&str> = Some("NOVA")
+
+    if let Some(name) = maybe_name {
+        println!("Hello, {}!", name)
+    }
+
+    // Chaining if let
+    let x = Some(1)
+    let y = Some(2)
+
+    if let (Some(a), Some(b)) = (x, y) {
+        println!("Both present: {} + {} = {}", a, b, a + b)
+    }
+
+    println!("\n✅ If/Else Expressions example completed!")
+}

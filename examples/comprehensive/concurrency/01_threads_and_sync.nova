@@ -1,0 +1,267 @@
+// Example 1: Threads and Synchronization Primitives
+// Demonstrates: thread spawning, join, Mutex, RwLock, Arc, channels, barriers
+
+fn main() {
+    println!("=== Threads & Synchronization ===\n")
+
+    use std::thread
+    use std::sync::{Mutex, RwLock, Arc, Barrier, Condvar}
+    use std::time::Duration
+
+    // ===== BASIC THREAD SPAWNING =====
+    println!("--- Basic Threads ---")
+
+    let handle = thread::spawn(|| {
+        println!("  Hello from spawned thread!")
+        let mut sum = 0
+        for i in 1..=10 {
+            sum += i
+        }
+        sum
+    })
+
+    println!("  Main thread continues...")
+    let result = handle.join().unwrap()
+    println!("  Thread returned: {}", result)
+
+    // ===== THREAD WITH CAPTURED ENVIRONMENT =====
+    println!("\n--- Captured Environment ---")
+
+    let message = String::from("Hello from main")
+    let numbers = vec![1, 2, 3, 4, 5]
+
+    let handle = thread::spawn(move || {
+        println!("  Thread got message: {}", message)
+        let sum: i32 = numbers.iter().sum()
+        println!("  Sum of numbers: {}", sum)
+    })
+
+    handle.join().unwrap()
+
+    // ===== MUTEX (MUTUAL EXCLUSION) =====
+    println!("\n--- Mutex ---")
+
+    let counter = Arc::new(Mutex::new(0))
+    let mut handles = vec![]
+
+    for i in 0..10 {
+        let counter = Arc::clone(&counter)
+        let handle = thread::spawn(move || {
+            let mut num = counter.lock().unwrap()
+            *num += 1
+            println!("  Thread {} incremented to {}", i, *num)
+        })
+        handles.push(handle)
+    }
+
+    for handle in handles {
+        handle.join().unwrap()
+    }
+
+    println!("  Final counter: {}", *counter.lock().unwrap())
+
+    // ===== RWLOCK (READ-WRITE LOCK) =====
+    println!("\n--- RwLock ---")
+
+    let data = Arc::new(RwLock::new(vec![1, 2, 3, 4, 5]))
+    let mut handles = vec![]
+
+    // Multiple readers
+    for i in 0..3 {
+        let data = Arc::clone(&data)
+        let handle = thread::spawn(move || {
+            let read_guard = data.read().unwrap()
+            println!("  Reader {} sees: {:?}", i, *read_guard)
+            thread::sleep(Duration::from_millis(10))
+        })
+        handles.push(handle)
+    }
+
+    // One writer
+    let data_write = Arc::clone(&data)
+    let write_handle = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20))
+        let mut write_guard = data_write.write().unwrap()
+        write_guard.push(6)
+        println!("  Writer added 6, now: {:?}", *write_guard)
+    })
+    handles.push(write_handle)
+
+    for handle in handles {
+        handle.join().unwrap()
+    }
+
+    println!("  Final data: {:?}", *data.read().unwrap())
+
+    // ===== CHANNELS (MESSAGE PASSING) =====
+    println!("\n--- Channels ---")
+
+    use std::sync::mpsc
+
+    // Simple channel
+    let (tx, rx) = mpsc::channel()
+
+    thread::spawn(move || {
+        let messages = vec!["hello", "world", "from", "thread"]
+        for msg in messages {
+            tx.send(msg).unwrap()
+            thread::sleep(Duration::from_millis(50))
+        }
+    })
+
+    println!("  Main thread receiving:")
+    for received in rx {
+        println!("    Got: {}", received)
+    }
+
+    // Multiple producers
+    println!("\n  Multiple producers:")
+    let (tx, rx) = mpsc::channel()
+    let mut handles = vec![]
+
+    for i in 0..3 {
+        let tx = tx.clone()
+        let handle = thread::spawn(move || {
+            for j in 0..3 {
+                tx.send(format!("Thread {} - msg {}", i, j)).unwrap()
+            }
+        })
+        handles.push(handle)
+    }
+
+    drop(tx)  // Important: close the sender in main
+
+    for msg in rx {
+        println!("    Got: {}", msg)
+    }
+
+    for handle in handles {
+        handle.join().unwrap()
+    }
+
+    // ===== SYNC CHANNEL (BOUNDED) =====
+    println!("\n--- Sync Channel (Bounded) ---")
+
+    let (tx, rx) = mpsc::sync_channel(2)  // Buffer of 2
+
+    let handle = thread::spawn(move || {
+        for i in 0..5 {
+            println!("  Sending {}", i)
+            tx.send(i).unwrap()
+            println!("  Sent {}", i)
+        }
+    })
+
+    thread::sleep(Duration::from_millis(100))
+    println!("  Main receiving...")
+    for _ in 0..5 {
+        println!("  Received: {}", rx.recv().unwrap())
+    }
+
+    handle.join().unwrap()
+
+    // ===== ARC (ATOMIC REFERENCE COUNTING) =====
+    println!("\n--- Arc ---")
+
+    let data = Arc::new(vec![1, 2, 3, 4, 5])
+    let mut handles = vec![]
+
+    for i in 0..3 {
+        let data = Arc::clone(&data)
+        let handle = thread::spawn(move || {
+            println!("  Thread {} sees data: {:?}", i, data)
+        })
+        handles.push(handle)
+    }
+
+    for handle in handles {
+        handle.join().unwrap()
+    }
+
+    println!("  Arc strong count: {}", Arc::strong_count(&data))
+
+    // ===== BARRIER =====
+    println!("\n--- Barrier ---")
+
+    let barrier = Arc::new(Barrier::new(3))
+    let mut handles = vec![]
+
+    for i in 0..3 {
+        let barrier = Arc::clone(&barrier)
+        let handle = thread::spawn(move || {
+            println!("  Thread {} waiting at barrier", i)
+            barrier.wait()
+            println!("  Thread {} passed barrier", i)
+        })
+        handles.push(handle)
+    }
+
+    for handle in handles {
+        handle.join().unwrap()
+    }
+
+    // ===== CONDVAR (CONDITION VARIABLE) =====
+    println!("\n--- Condvar ---")
+
+    let pair = Arc::new((Mutex::new(false), Condvar::new()))
+    let pair2 = Arc::clone(&pair)
+
+    let handle = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100))
+        let (lock, cvar) = &*pair2
+        let mut started = lock.lock().unwrap()
+        *started = true
+        println!("  Worker: Notifying main thread")
+        cvar.notify_one()
+    })
+
+    let (lock, cvar) = &*pair
+    let mut started = lock.lock().unwrap()
+    println!("  Main: Waiting for notification...")
+    while !*started {
+        started = cvar.wait(started).unwrap()
+    }
+    println!("  Main: Notified! Value = {}", *started)
+
+    handle.join().unwrap()
+
+    // ===== THREAD LOCAL STORAGE =====
+    println!("\n--- Thread Local Storage ---")
+
+    thread_local! {
+        static COUNTER: std::cell::RefCell<u32> = std::cell::RefCell::new(0)
+    }
+
+    let handles: Vec<_> = (0..3).map(|i| {
+        thread::spawn(move || {
+            COUNTER.with(|c| {
+                *c.borrow_mut() += 1
+                println!("  Thread {}: counter = {}", i, *c.borrow())
+            })
+        })
+    }).collect()
+
+    for h in handles { h.join().unwrap() }
+
+    // Main thread has its own
+    COUNTER.with(|c| println!("  Main thread counter: {}", *c.borrow()))
+
+    // ===== SCOPED THREADS =====
+    println!("\n--- Scoped Threads ---")
+
+    let mut data = vec![1, 2, 3, 4, 5]
+
+    thread::scope(|s| {
+        s.spawn(|| {
+            println!("  Scoped thread 1: {:?}", data)
+        })
+        s.spawn(|| {
+            data.push(6)
+            println!("  Scoped thread 2 modified: {:?}", data)
+        })
+    })
+
+    println!("  After scope: {:?}", data)
+
+    println!("\n✅ Threads & Synchronization example completed!")
+}

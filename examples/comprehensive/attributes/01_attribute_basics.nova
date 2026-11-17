@@ -1,0 +1,253 @@
+// Example 1: Attribute Basics
+// Demonstrates: built-in attributes, custom attributes, attribute syntax, common patterns
+
+fn main() {
+    println!("=== Attribute Basics ===\n")
+
+    // ===== BUILT-IN ATTRIBUTES =====
+    println!("--- Built-in Attributes ---")
+
+    // Conditional compilation
+    #[cfg(target_os = "linux")]
+    fn linux_only() {
+        println!("  Running on Linux")
+    }
+
+    #[cfg(feature = "extra")]
+    fn extra_feature() {
+        println!("  Extra feature enabled")
+    }
+
+    // Deprecation
+    #[deprecated(since = "1.2.0", note = "Use new_function instead")]
+    fn old_function() {
+        println!("  Old function")
+    }
+
+    // Must use
+    #[must_use]
+    fn returns_important_value() -> i32 {
+        42
+    }
+
+    // Inline hints
+    #[inline]
+    fn inline_hint() -> i32 {
+        1 + 1
+    }
+
+    #[inline(always)]
+    fn always_inline() -> i32 {
+        2 + 2
+    }
+
+    #[inline(never)]
+    fn never_inline() -> i32 {
+        3 + 3
+    }
+
+    // Cold path
+    #[cold]
+    fn error_path() {
+        println!("  Error occurred")
+    }
+
+    // No mangling
+    #[no_mangle]
+    pub extern "C" fn c_callable() {
+        println!("  Callable from C")
+    }
+
+    // Used to suppress warnings
+    #[allow(dead_code)]
+    fn unused_function() {
+        println!("  This is intentionally unused")
+    }
+
+    #[allow(unused_variables)]
+    fn with_unused() {
+        let x = 10
+    }
+
+    // Expect (panic with message)
+    #[expect(unused_variables)]
+    fn expect_unused() {
+        let y = 20
+    }
+
+    println!("  Built-in attributes demonstrated")
+
+    // ===== TEST ATTRIBUTES =====
+    println!("\n--- Test Attributes ---")
+
+    #[test]
+    fn test_addition() {
+        assert_eq!(2 + 2, 4)
+    }
+
+    #[test]
+    #[ignore = "Slow test"]
+    fn test_slow() {
+        std::thread::sleep(std::time::Duration::from_millis(100))
+        assert!(true)
+    }
+
+    #[bench]
+    fn bench_addition(b: &mut Bencher) {
+        b.iter(|| 2 + 2)
+    }
+
+    // ===== DOCUMENTATION ATTRIBUTES =====
+    println!("\n--- Documentation Attributes ---")
+
+    /// This function adds two numbers.
+    /// 
+    /// # Examples
+    /// ```
+    /// let sum = documented_add(2, 3);
+    /// assert_eq!(sum, 5);
+    /// ```
+    #[doc = "Additional documentation"]
+    fn documented_add(a: i32, b: i32) -> i32 {
+        a + b
+    }
+
+    // Doc comments are sugar for #[doc = "..."]
+    // //! Module documentation
+    // //! 
+    // //! This module provides math functions.
+
+    // ===== PROCEDURAL MACRO ATTRIBUTES =====
+    println!("\n--- Procedural Macro Attributes ---")
+
+    // Derive macros
+    #[derive(Debug, Clone, PartialEq)]
+    struct DerivedStruct {
+        value: i32,
+    }
+
+    // Attribute macros (custom)
+    // #[route("/api/users")]
+    // async fn get_users() -> Json<Vec<User>> { ... }
+
+    // Function-like macros
+    // let sql = sql!("SELECT * FROM users");
+
+    println!("  Proc macro attributes shown")
+
+    // ===== MODULE ATTRIBUTES =====
+    println!("\n--- Module Attributes ---")
+
+    // Applied to modules
+    #[path = "custom_path.nova"]
+    mod custom_module {
+        pub fn func() { println!("  Custom path module") }
+    }
+
+    #[macro_use]
+    mod macros_module {
+        macro_rules! my_macro {
+            () => { println!("  Macro!") }
+        }
+    }
+
+    // ===== STRUCT/ENUM ATTRIBUTES =====
+    println!("\n--- Struct/Enum Attributes ---")
+
+    #[repr(C)]
+    struct CRepr {
+        a: i32,
+        b: f64,
+    }
+
+    #[repr(packed)]
+    struct Packed {
+        a: u8,
+        b: u32,
+    }
+
+    #[repr(transparent)]
+    struct Transparent(i32);
+
+    #[repr(u8)]
+    enum SmallEnum {
+        A = 1,
+        B = 2,
+    }
+
+    #[non_exhaustive]
+    enum NonExhaustive {
+        Variant1,
+        Variant2,
+    }
+
+    // ===== FUNCTION ATTRIBUTES =====
+    println!("\n--- Function Attributes ---")
+
+    #[track_caller]
+    fn track_caller_fn() {
+        // Panics will show caller location
+    }
+
+    #[const_fn]
+    fn const_fn() -> i32 {
+        42
+    }
+
+    // ===== LINT ATTRIBUTES =====
+    println!("\n--- Lint Attributes ---")
+
+    #[allow(clippy::all)]
+    fn allow_clippy() {
+        // Clippy lints allowed
+    }
+
+    #[warn(clippy::pedantic)]
+    fn warn_pedantic() {
+        // Pedantic warnings
+    }
+
+    #[deny(clippy::unwrap_used)]
+    fn deny_unwrap() {
+        // unwrap() is an error
+        // let x = Some(1).unwrap()  // Error!
+    }
+
+    // ===== CUSTOM ATTRIBUTES =====
+    println!("\n--- Custom Attributes ---")
+
+    // Define custom attribute (procedural macro)
+    // #[my_custom_attr]
+    // fn annotated() { ... }
+
+    // Can be used for:
+    // - Serialization: #[serde(rename = "field_name")]
+    // - Validation: #[validate(length(min = 1))]
+    // - Routing: #[get("/path")]
+    // - Database: #[table("users")]
+
+    println!("  Custom attribute patterns shown")
+
+    // ===== ATTRIBUTE ORDER =====
+    println!("\n--- Attribute Order ---")
+
+    // Order generally doesn't matter, but:
+    // 1. Outer attributes (on item) before inner attributes (in block)
+    // 2. #[cfg] should be outermost for conditional compilation
+
+    #[cfg(feature = "a")]
+    #[derive(Debug)]
+    #[allow(dead_code)]
+    struct Ordered {
+        value: i32,
+    }
+
+    println!("  Attribute order shown")
+
+    println!("\n✅ Attribute Basics example completed!")
+}
+
+// Mock types for compilation
+struct Bencher {
+    iter: fn(),
+}

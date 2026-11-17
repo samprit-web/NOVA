@@ -22,7 +22,7 @@ toml_edit = { workspace = true }
 
 # Parsing
 nom = { workspace = true }
-pest = { workspace = true, features = ["serde"] }
+pest = { workspace = true, features = [] }
 pest_derive = { workspace = true }
 lalrpop = { workspace = true }
 lalrpop-util = { workspace = true }
@@ -32,21 +32,31 @@ indexmap = "2.0"
 smallvec = "1.10"
 bitflags = "2.4"
 slotmap = "1.0"
-generational-arena = "0.3"
-frozen = "0.3"
-stencil = "0.5"
+generational-arena = "0.2"
+# frozen = "0.3"  # Not available
+stencil = "0.2"
+
+# Codegen (optional)
+inkwell = { version = "0.1", optional = true }
+cranelift = { version = "0.96", optional = true }
+wasmtime = { version = "25.0", optional = true }
+
+# LSP (optional)
+tower-lsp = { version = "0.20", optional = true }
+lsp-types = { version = "0.94", optional = true }
 
 # Utilities
 regex = "1.10"
 glob = { workspace = true }
 walkdir = { workspace = true }
 ignore = { workspace = true }
+num_cpus = "1.16"
 
 [dev-dependencies]
 criterion = { workspace = true }
 proptest = { workspace = true }
 pretty_assertions = { workspace = true }
-instanta = { workspace = true }
+insta = { workspace = true }
 trybuild = { workspace = true }
 
 [build-dependencies]
@@ -55,7 +65,7 @@ lalrpop = { workspace = true }
 [features]
 default = ["parser"]
 parser = []
-codegen = ["inkwell", "cranelift"]
-vm = ["wasmtime"]
-lsp = ["tower-lsp", "lsp-types"]
-full = ["parser", "codegen", "vm", "lsp"]
+# codegen = ["inkwell", "cranelift"]  # Disabled due to inkwell/LLVM version mismatch
+# vm = ["wasmtime"]  # Disabled for now
+# lsp = ["tower-lsp", "lsp-types"]  # Disabled for now
+# full = ["parser", "codegen", "vm", "lsp"]

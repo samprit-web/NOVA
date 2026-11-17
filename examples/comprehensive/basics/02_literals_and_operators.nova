@@ -1,0 +1,144 @@
+// Example 2: Literals and Operators
+// Demonstrates: all literal types, arithmetic, comparison, logical, bitwise operators
+
+fn main() {
+    println!("=== Literals & Operators ===\n")
+
+    // ===== INTEGER LITERALS =====
+    let decimal = 42
+    let hex = 0x2A
+    let octal = 0o52
+    let binary = 0b101010
+    let with_underscores = 1_000_000
+    let typed_int: i64 = 42i64
+    let typed_uint: u32 = 100u32
+
+    println!("Integers: dec={}, hex={}, oct={}, bin={}, underscores={}, typed_i64={}, typed_u32={}",
+             decimal, hex, octal, binary, with_underscores, typed_int, typed_uint)
+
+    // ===== FLOAT LITERALS =====
+    let float_simple = 3.14
+    let float_exp = 1.5e2      // 150.0
+    let float_exp_neg = 2e-3   // 0.002
+    let hex_float = 0x1.8p3    // 12.0 (1.5 * 2^3)
+    let typed_f32: f32 = 3.14f32
+    let typed_f64: f64 = 2.71828f64
+
+    println!("Floats: simple={}, exp={}, exp_neg={}, hex={}, f32={}, f64={}",
+             float_simple, float_exp, float_exp_neg, hex_float, typed_f32, typed_f64)
+
+    // ===== CHARACTER LITERALS =====
+    let ascii = 'A'
+    let unicode = '🦀'
+    let escaped_newline = '\n'
+    let escaped_unicode = '\u{1F980}'  // crab emoji
+    let byte_char = b'Z'               // u8 byte literal
+
+    println!("Chars: ascii={}, unicode={}, newline={:?}, unicode_escape={}, byte={}",
+             ascii, unicode, escaped_newline, escaped_unicode, byte_char)
+
+    // ===== STRING LITERALS =====
+    let simple = "Hello, NOVA!"
+    let with_escapes = "Line 1\nLine 2\tTabbed"
+    let unicode_string = "Hello 世界 🌍"
+    let raw = r#"Raw string with "quotes" and \backslashes"#
+    let multi_line_raw = r##"
+        Multi-line raw string
+        with "quotes" and #chars
+        no escaping needed
+    "##;
+    let byte_string = b"ASCII only"
+    let raw_byte = br#"Raw bytes: \x41\x42"#
+
+    println!("Strings: simple={}, escapes={}, unicode={}, raw={}, multiline={}, bytes={}, raw_bytes={}",
+             simple, with_escapes, unicode_string, raw, multi_line_raw.trim(), byte_string, raw_byte)
+
+    // ===== BOOLEAN & UNIT =====
+    let truth = true
+    let lies = false
+    let nothing = ()
+
+    println!("Bool: truth={}, lies={}, unit={:?}", truth, lies, nothing)
+
+    // ===== ARITHMETIC OPERATORS =====
+    let a = 10
+    let b = 3
+
+    println!("\nArithmetic: a={}, b={}", a, b)
+    println!("  + add: {} + {} = {}", a, b, a + b)
+    println!("  - sub: {} - {} = {}", a, b, a - b)
+    println!("  * mul: {} * {} = {}", a, b, a * b)
+    println!("  / div: {} / {} = {} (integer)", a, b, a / b)
+    println!("  % rem: {} % {} = {}", a, b, a % b)
+
+    // Float division
+    let fa = 10.0f64
+    let fb = 3.0f64
+    println!("  Float div: {} / {} = {}", fa, fb, fa / fb)
+
+    // ===== COMPARISON OPERATORS =====
+    println!("\nComparison: a={}, b={}", a, b)
+    println!("  == equal: {}", a == b)
+    println!("  != not equal: {}", a != b)
+    println!("  < less: {}", a < b)
+    println!("  > greater: {}", a > b)
+    println!("  <= less/equal: {}", a <= b)
+    println!("  >= greater/equal: {}", a >= b)
+
+    // ===== LOGICAL OPERATORS =====
+    let x = true
+    let y = false
+
+    println!("\nLogical: x={}, y={}", x, y)
+    println!("  && and: {}", x && y)
+    println!("  || or: {}", x || y)
+    println!("  ! not x: {}", !x)
+    println!("  ! not y: {}", !y)
+
+    // Short-circuit evaluation
+    println!("  Short-circuit: {}", true || { println!("  (not evaluated)"); false })
+    println!("  Short-circuit: {}", false && { println!("  (not evaluated)"); true })
+
+    // ===== BITWISE OPERATORS =====
+    let bits_a = 0b1100  // 12
+    let bits_b = 0b1010  // 10
+
+    println!("\nBitwise: a={:04b} ({}), b={:04b} ({})", bits_a, bits_a, bits_b, bits_b)
+    println!("  & and:  {:04b} ({})", bits_a & bits_b, bits_a & bits_b)
+    println!("  | or:   {:04b} ({})", bits_a | bits_b, bits_a | bits_b)
+    println!("  ^ xor:  {:04b} ({})", bits_a ^ bits_b, bits_a ^ bits_b)
+    println!("  ! not:  {:04b} ({})", !bits_a & 0b1111, !bits_a & 0b1111)
+    println!("  << shl: {:04b} ({})", bits_a << 1, bits_a << 1)
+    println!("  >> shr: {:04b} ({})", bits_a >> 1, bits_a >> 1)
+
+    // ===== COMPOUND ASSIGNMENT =====
+    let mut assign = 10
+    assign += 5; println!("  += : {}", assign)
+    assign -= 3; println!("  -= : {}", assign)
+    assign *= 2; println!("  *= : {}", assign)
+    assign /= 4; println!("  /= : {}", assign)
+    assign %= 3; println!("  %= : {}", assign)
+    assign &= 0b110; println!("  &= : {:04b}", assign)
+    assign |= 0b001; println!("  |= : {:04b}", assign)
+    assign ^= 0b100; println!("  ^= : {:04b}", assign)
+    assign <<= 1; println!("  <<=: {:04b}", assign)
+    assign >>= 1; println!("  >>=: {:04b}", assign)
+
+    // ===== TYPE CASTING (as) =====
+    let int_val = 42i32
+    let float_val = int_val as f64
+    let back_to_int = float_val as i32
+    let truncated = 300u16 as u8  // truncates to 44
+
+    println!("\nType casting:")
+    println!("  i32 -> f64: {} -> {}", int_val, float_val)
+    println!("  f64 -> i32: {} -> {}", float_val, back_to_int)
+    println!("  u16 -> u8 (truncate): 300 -> {}", truncated)
+
+    // ===== OPERATOR PRECEDENCE =====
+    // Highest to lowest: as, *, /, %, +, -, <<, >>, &, ^, |, ==, !=, <, >, <=, >=, &&, ||
+    let precedence = 1 + 2 * 3 - 4 / 5 % 6
+    println!("\nPrecedence: 1 + 2 * 3 - 4 / 5 % 6 = {}", precedence)
+
+    println!("\n✅ Literals & Operators example completed!")
+}

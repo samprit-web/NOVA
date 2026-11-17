@@ -1,0 +1,170 @@
+// Example 1: Basic FFI
+// Demonstrates: extern blocks, calling C functions, passing data, callbacks
+
+fn main() {
+    println!("=== Basic FFI ===\n")
+
+    // ===== EXTERN BLOCKS =====
+    println!("--- Extern Blocks ---")
+
+    // Declare external C functions
+    extern "C" {
+        fn abs(input: i32) -> i32;
+        fn sqrt(input: f64) -> f64;
+        fn strlen(s: *const i8) -> usize;
+        fn malloc(size: usize) -> *mut u8;
+        fn free(ptr: *mut u8);
+    }
+
+    // Call C functions
+    let n = -42
+    println!("  abs(-42) = {}", unsafe { abs(n) })
+
+    let val = 16.0
+    println!("  sqrt(16.0) = {}", unsafe { sqrt(val) })
+
+    // ===== STRING HANDLING =====
+    println!("\n--- String Handling ---")
+
+    let rust_string = String::from("Hello, FFI!")
+    let c_string = std::ffi::CString::new(rust_string).unwrap()
+
+    let len = unsafe { strlen(c_string.as_ptr()) }
+    println!("  C string length: {}", len)
+
+    // Converting back
+    let c_str = unsafe { std::ffi::CStr::from_ptr(c_string.as_ptr()) }
+    println!("  Back to Rust: {:?}", c_str.to_str())
+
+    // ===== MEMORY MANAGEMENT =====
+    println!("\n--- Memory Management ---")
+
+    // Allocate in C, free in Rust
+    let ptr = unsafe { malloc(100) }
+    if !ptr.is_null() {
+        println!("  Allocated 100 bytes at {:?}", ptr)
+        unsafe { free(ptr) }
+        println!("  Freed memory")
+    }
+
+    // Allocate in Rust, pass to C
+    let mut vec = vec![1u8, 2, 3, 4, 5]
+    let ptr = vec.as_mut_ptr()
+    println!("  Vec pointer: {:?}", ptr)
+
+    // ===== CALLBACKS =====
+    println!("\n--- Callbacks ---")
+
+    extern "C" {
+        fn register_callback(cb: extern "C" fn(i32) -> i32);
+        fn trigger_callback(value: i32);
+    }
+
+    // Define callback
+    extern "C" fn my_callback(x: i32) -> i32 {
+        println!("  Callback called with: {}", x)
+        x * 2
+    }
+
+    // Note: In real code, you'd register and trigger
+    println!("  Callback function defined")
+
+    // ===== STRUCTS =====
+    println!("\n--- Structs ---")
+
+    #[repr(C)]
+    struct Point {
+        x: f64,
+        y: f64,
+    }
+
+    extern "C" {
+        fn translate_point(p: *mut Point, dx: f64, dy: f64);
+        fn distance(p1: *const Point, p2: *const Point) -> f64;
+    }
+
+    let mut point = Point { x: 1.0, y: 2.0 }
+    println!("  Original: ({}, {})", point.x, point.y)
+
+    unsafe { translate_point(&mut point, 5.0, 3.0) }
+    println!("  After translate: ({}, {})", point.x, point.y)
+
+    let p1 = Point { x: 0.0, y: 0.0 }
+    let p2 = Point { x: 3.0, y: 4.0 }
+    let dist = unsafe { distance(&p1, &p2) }
+    println!("  Distance: {}", dist)
+
+    // ===== ENUMS =====
+    println!("\n--- Enums ---")
+
+    #[repr(C)]
+    enum Status {
+        Success = 0,
+        Error = 1,
+        Pending = 2,
+    }
+
+    extern "C" {
+        fn get_status() -> Status;
+        fn set_status(s: Status);
+    }
+
+    let status = unsafe { get_status() }
+    println!("  Status: {:?}", status)
+
+    unsafe { set_status(Status::Pending) }
+    println!("  Set to Pending")
+
+    // ===== UNIONS =====
+    println!("\n--- Unions ---")
+
+    #[repr(C)]
+    union IntOrFloat {
+        i: i32,
+        f: f32,
+    }
+
+    let mut u = IntOrFloat { i: 42 }
+    println!("  As int: {}", unsafe { u.i })
+
+    u = IntOrFloat { f: 3.14 }
+    println!("  As float: {}", unsafe { u.f })
+
+    // ===== VARIADIC FUNCTIONS =====
+    println!("\n--- Variadic Functions ---")
+
+    extern "C" {
+        fn printf(format: *const i8, ...) -> i32;
+    }
+
+    let fmt = std::ffi::CString::new("Variadic: %d, %f, %s\n").unwrap()
+    unsafe {
+        printf(fmt.as_ptr(), 42, 3.14, std::ffi::CString::new("hello").unwrap().as_ptr())
+    }
+
+    // ===== LINKING =====
+    println!("\n--- Linking ---")
+    println!("  #[link(name = \"m\")]        // Link math library")
+    println!("  #[link(name = \"ssl\", kind = \"static\")]  // Static link OpenSSL")
+    println!("  #[link(name = \"mylib\", kind = \"dylib\")] // Dynamic link")
+
+    // ===== CALL CONVENTIONS =====
+    println!("\n--- Call Conventions ---")
+
+    extern "C" { fn c_func(); }
+    extern "system" { fn system_func(); }  // stdcall on Windows
+    extern "fastcall" { fn fast_func(); }  // fastcall
+    extern "rust-call" { fn rust_func(); } // Rust ABI
+
+    // ===== SAFETY =====
+    println!("\n--- Safety ---")
+    println!("  All FFI calls require unsafe blocks")
+    println!("  Ensure:")
+    println!("    - Correct function signatures")
+    println!("    - Valid pointers")
+    println!("    - Proper memory ownership")
+    println!("    - Thread safety")
+    println!("    - No panic across FFI boundary")
+
+    println!("\n✅ Basic FFI example completed!")
+}

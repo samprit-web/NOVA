@@ -1,0 +1,326 @@
+// Example 2: Advanced Testing
+// Demonstrates: benchmarks, fuzzing, snapshot testing, test coverage, CI integration
+
+fn main() {
+    println!("=== Advanced Testing ===\n")
+
+    // ===== BENCHMARKS =====
+    println!("--- Benchmarks ---")
+
+    // In benches/bench.nova
+    // use nova_bench::Bencher;
+    //
+    // #[bench]
+    // fn bench_hashmap_insert(b: &mut Bencher) {
+    //     b.iter(|| {
+    //         let mut map = HashMap::new();
+    //         for i in 0..1000 {
+    //             map.insert(i, i);
+    //         }
+    //     });
+    // }
+    //
+    // #[bench]
+    // fn bench_vec_push(b: &mut Bencher) {
+    //     b.iter(|| {
+    //         let mut v = Vec::new();
+    //         for i in 0..1000 {
+    //             v.push(i);
+    //         }
+    //     });
+    // }
+    //
+    // #[bench]
+    // fn bench_string_concat(b: &mut Bencher) {
+    //     b.iter(|| {
+    //         let mut s = String::new();
+    //         for i in 0..100 {
+    //             s.push_str("hello");
+    //         }
+    //     });
+    // }
+
+    // Run: nova bench
+
+    // Criterion-style
+    // use criterion::{black_box, criterion_group, criterion_main, Criterion};
+    //
+    // fn fibonacci(n: u64) -> u64 {
+    //     match n { 0 => 0, 1 => 1, _ => fibonacci(n-1) + fibonacci(n-2) }
+    // }
+    //
+    // fn criterion_benchmark(c: &mut Criterion) {
+    //     c.bench_function("fib 20", |b| b.iter(|| fibonacci(black_box(20))));
+    // }
+    //
+    // criterion_group!(benches, criterion_benchmark);
+    // criterion_main!(benches);
+
+    println!("  Benchmarks shown")
+
+    // ===== FUZZING =====
+    println!("\n--- Fuzzing ---")
+
+    // cargo-fuzz or libfuzzer
+    //
+    // // fuzz/fuzz_target_1.nova
+    // #![no_main]
+    // use libfuzzer_sys::fuzz_target;
+    //
+    // fuzz_target!(|data: &[u8]| {
+    //     if let Ok(s) = std::str::from_utf8(data) {
+    //         let _ = my_parser::parse(s);
+    //     }
+    // });
+    //
+    // // Run: cargo fuzz run fuzz_target_1
+
+    // Property-based fuzzing with proptest
+    // proptest! {
+    //     #[test]
+    //     fn test_parser_roundtrip(s in ".*") {
+    //         let parsed = my_parser::parse(&s);
+    //         if let Ok(ast) = parsed {
+    //             let serialized = ast.to_string();
+    //             let reparsed = my_parser::parse(&serialized);
+    //             assert_eq!(parsed, reparsed);
+    //         }
+    //     }
+    // }
+
+    println!("  Fuzzing shown")
+
+    // ===== SNAPSHOT TESTING =====
+    println!("\n--- Snapshot Testing ---")
+
+    // Using insta
+    //
+    // #[test]
+    // fn test_snapshot() {
+    //     let output = generate_output();
+    //     insta::assert_snapshot!(output);
+    // }
+    //
+    // // First run creates snapshot, subsequent runs compare
+    // // Update: INSTA_UPDATE=1 cargo test
+
+    // JSON snapshots
+    //
+    // #[test]
+    // fn test_json_snapshot() {
+    //     let data = serde_json::json!({
+    //         "users": [{"id": 1, "name": "Alice"}],
+    //         "total": 1
+    //     });
+    //     insta::assert_json_snapshot!(data);
+    // }
+
+    // Redaction for sensitive data
+    //
+    // #[test]
+    // fn test_with_redaction() {
+    //     let output = process_with_secrets();
+    //     insta::assert_snapshot!(output, {
+    //         ".password" => "[REDACTED]",
+    //         ".token" => "[REDACTED]",
+    //     });
+    // }
+
+    println!("  Snapshot testing shown")
+
+    // ===== CONTRACT TESTING =====
+    println!("\n--- Contract Testing ---")
+
+    // Pact or similar for API contracts
+    //
+    // #[test]
+    // fn test_provider_contract() {
+    //     let pact = Pact::new("Consumer", "Provider");
+    //     pact
+    //         .upon_receiving("a request for users")
+    //         .given("users exist")
+    //         .request
+    //             .method("GET")
+    //             .path("/api/users")
+    //         .will_respond_with()
+    //             .status(200)
+    //             .json_body(json!([{"id": 1, "name": "Alice"}]));
+    //
+    //     pact.verify();
+    // }
+
+    println!("  Contract testing shown")
+
+    // ===== MUTATION TESTING =====
+    println!("\n--- Mutation Testing ---")
+
+    // Using mutest or similar
+    //
+    // // Run: mutest --workspace
+    // // Mutates code to check if tests catch bugs
+    // // Example mutations:
+    // // - Change > to <
+    // // - Change + to -
+    // // - Remove function calls
+    // // - Change constants
+
+    println!("  Mutation testing shown")
+
+    // ===== TEST COVERAGE =====
+    println!("\n--- Test Coverage ---")
+
+    // cargo-llvm-cov or grcov
+    //
+    // // Run: cargo llvm-cov --html
+    // // Generates coverage report
+    //
+    // // In CI:
+    // // cargo llvm-cov --lcov --output-path lcov.info
+    // // codecov -f lcov.info
+
+    // Coverage annotations
+    //
+    // #[test]
+    // #[coverage(off)]
+    // fn test_without_coverage() { ... }
+    //
+    // #[cfg(test)]
+    // #[coverage(off)]
+    // mod test_utils { ... }
+
+    println!("  Coverage shown")
+
+    // ===== PARALLEL TEST EXECUTION =====
+    println!("\n--- Parallel Test Execution ---")
+
+    // nova test --test-threads=4
+    //
+    // // In code, use serial_test for tests that need isolation
+    // #[serial_test::serial]
+    // #[test]
+    // fn test_requires_exclusive_access() {
+    //     // Uses global state
+    // }
+
+    // // Or use locks
+    // lazy_static! {
+    //     static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
+    // }
+    //
+    // #[test]
+    // fn test_with_lock() {
+    //     let _guard = TEST_MUTEX.lock().unwrap();
+    //     // Test
+    // }
+
+    println!("  Parallel execution shown")
+
+    // ===== TEST REPORTING =====
+    println!("\n--- Test Reporting ---")
+
+    // JUnit XML output
+    // nova test --report-junit=results.xml
+
+    // JSON output
+    // nova test --message-format=json
+
+    // Custom test harness
+    //
+    // #[test_runner]
+    // fn custom_runner(tests: &[TestDescAndFn]) {
+    //     // Custom execution logic
+    // }
+
+    println!("  Test reporting shown")
+
+    // ===== INTEGRATION WITH CI =====
+    println!("\n--- CI Integration ---")
+
+    // GitHub Actions example:
+    // .github/workflows/test.yml
+    // name: Test
+    // on: [push, pull_request]
+    // jobs:
+    //   test:
+    //     runs-on: ubuntu-latest
+    //     steps:
+    //       - uses: actions/checkout@v4
+    //       - uses: dtolnay/rust-toolchain@stable
+    //       - run: nova test --workspace
+    //       - run: nova bench
+    //       - uses: codecov/codecov-action@v3
+
+    // Matrix testing
+    // strategy:
+    //   matrix:
+    //     os: [ubuntu-latest, macos-latest, windows-latest]
+    //     rust: [stable, beta, nightly]
+
+    println!("  CI integration shown")
+
+    // ===== TESTING BEST PRACTICES =====
+    println!("\n--- Testing Best Practices ---")
+
+    println!("  1. Test behavior, not implementation")
+    println!("  2. Use descriptive test names: test_<what>_<expected>")
+    println!("  3. One assertion per test (when possible)")
+    println!("  4. Use fixtures for complex setup")
+    println!("  5. Test edge cases: empty, max, invalid input")
+    println!("  6. Keep tests fast and deterministic")
+    println!("  7. Use property-based testing for complex logic")
+    println!("  8. Snapshot test complex outputs")
+    println!("  9. Fuzz test parsers and validators")
+    println!("  10. Measure coverage, aim for >80%")
+
+    // ===== EXAMPLE: COMPLETE TEST SUITE =====
+    println!("\n--- Complete Test Suite Example ---")
+
+    // src/lib.nova
+    // pub mod math {
+    //     pub fn add(a: i32, b: i32) -> i32 { a + b }
+    //     pub fn div(a: i32, b: i32) -> Result<i32, String> {
+    //         if b == 0 { Err("Div by zero".into()) } else { Ok(a / b) }
+    //     }
+    // }
+    //
+    // #[cfg(test)]
+    // mod tests {
+    //     use super::math;
+    //
+    //     #[test]
+    //     fn add_works() {
+    //         assert_eq!(math::add(2, 3), 5);
+    //     }
+    //
+    //     #[test]
+    //     fn div_works() {
+    //         assert_eq!(math::div(10, 2), Ok(5));
+    //     }
+    //
+    //     #[test]
+    //     fn div_by_zero() {
+    //         assert_eq!(math::div(10, 0), Err("Div by zero".into()));
+    //     }
+    //
+    //     // Property test
+    //     proptest! {
+    //         #[test]
+    //         fn add_commutative(a in 0..1000, b in 0..1000) {
+    //             assert_eq!(math::add(a, b), math::add(b, a));
+    //         }
+    //     }
+    // }
+    //
+    // tests/integration.nova
+    // use my_lib::math;
+    //
+    // #[test]
+    // fn full_calculation() {
+    //     let result = math::add(math::div(100, 2).unwrap(), 50);
+    //     assert_eq!(result, 100);
+    // }
+
+    println!("  Complete test suite shown")
+
+    println!("\n✅ Advanced Testing example completed!")
+}

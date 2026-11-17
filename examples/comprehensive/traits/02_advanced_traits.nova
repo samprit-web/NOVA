@@ -1,0 +1,300 @@
+// Example 2: Advanced Traits
+// Demonstrates: sealed traits, extension traits, trait aliases, specialization, coherence
+
+fn main() {
+    println!("=== Advanced Traits ===\n")
+
+    // ===== EXTENSION TRAITS =====
+    println!("--- Extension Traits ---")
+
+    trait StringExt {
+        fn to_uppercase_snake(&self) -> String;
+        fn is_palindrome(&self) -> bool;
+    }
+
+    impl StringExt for str {
+        fn to_uppercase_snake(&self) -> String {
+            self.chars()
+                .map(|c| if c.is_uppercase() { format!("_{}", c.to_lowercase()) } else { c.to_string() })
+                .collect::<String>()
+                .trim_start_matches('_')
+                .to_string()
+        }
+
+        fn is_palindrome(&self) -> bool {
+            let cleaned: String = self.chars()
+                .filter(|c| c.is_alphanumeric())
+                .map(|c| c.to_lowercase().to_string())
+                .collect();
+            cleaned == cleaned.chars().rev().collect::<String>()
+        }
+    }
+
+    println!("  'HelloWorld'.to_uppercase_snake(): {}", "HelloWorld".to_uppercase_snake())
+    println!("  'racecar'.is_palindrome(): {}", "racecar".is_palindrome())
+    println!("  'hello'.is_palindrome(): {}", "hello".is_palindrome())
+
+    // ===== SEALED TRAITS =====
+    println!("\n--- Sealed Traits (Simulated) ---")
+
+    mod sealed {
+        pub trait Sealed {}
+        impl Sealed for crate::Circle {}
+        impl Sealed for crate::Rectangle {}
+    }
+
+    pub trait Shape: sealed::Sealed {
+        fn area(&self) -> f64;
+    }
+
+    // Only Circle and Rectangle can implement Shape
+    // struct Triangle; // Cannot implement Shape
+
+    // ===== TRAIT ALIASES =====
+    println!("\n--- Trait Aliases (Simulated) ---")
+
+    // Using a trait with blanket impl as alias
+    trait Serializable: serde::Serialize + serde::DeserializeOwned + Send + Sync + 'static {}
+    impl<T: serde::Serialize + serde::DeserializeOwned + Send + Sync + 'static> Serializable for T {}
+
+    // Or using type alias with bounds
+    type JsonSerializable = dyn serde::Serialize + serde::DeserializeOwned + Send + Sync;
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct User {
+        name: String,
+        age: u32,
+    }
+
+    println!("  Trait alias pattern demonstrated")
+
+    // ===== BLANKET IMPLEMENTATIONS =====
+    println!("\n--- Blanket Implementations ---")
+
+    trait ToJson {
+        fn to_json(&self) -> String;
+    }
+
+    // Blanket impl for all Serialize types
+    impl<T: serde::Serialize> ToJson for T {
+        fn to_json(&self) -> String {
+            serde_json::to_string(self).unwrap()
+        }
+    }
+
+    let user = User { name: "Alice".to_string(), age: 30 }
+    println!("  User JSON: {}", user.to_json())
+
+    // ===== TRAIT OBJECTS WITH ASSOCIATED TYPES =====
+    println!("\n--- Trait Objects with Associated Types ---")
+
+    trait Iterator {
+        type Item;
+        fn next(&mut self) -> Option<Self::Item>;
+    }
+
+    // Can't make dyn Iterator directly with associated types
+    // But can use dyn Iterator<Item = T>
+    fn collect_into_vec(iter: &mut dyn Iterator<Item = i32>) -> Vec<i32> {
+        let mut vec = Vec::new()
+        while let Some(item) = iter.next() {
+            vec.push(item)
+        }
+        vec
+    }
+
+    let mut iter = vec![1, 2, 3].into_iter()
+    println!("  Collected: {:?}", collect_into_vec(&mut iter))
+
+    // ===== ASYNC TRAITS =====
+    println!("\n--- Async Traits ---")
+
+    #[async_trait::async_trait]
+    trait Database {
+        async fn connect(&self) -> Result<(), String>;
+        async fn query(&self, sql: &str) -> Result<Vec<String>, String>;
+    }
+
+    struct PostgresDb { connected: bool }
+
+    #[async_trait::async_trait]
+    impl Database for PostgresDb {
+        async fn connect(&self) -> Result<(), String> {
+            std::task::sleep(std::time::Duration::from_millis(10)).await
+            Ok(())
+        }
+
+        async fn query(&self, sql: &str) -> Result<Vec<String>, String> {
+            std::task::sleep(std::time::Duration::from_millis(5)).await
+            Ok(vec![format!("Result for: {}", sql)])
+        }
+    }
+
+    std::task::block_on(async {
+        let db = PostgresDb { connected: false }
+        db.connect().await.unwrap()
+        let results = db.query("SELECT * FROM users").await.unwrap()
+        println!("  Query results: {:?}", results)
+    })
+
+    // ===== TRAIT COERCION =====
+    println!("\n--- Trait Coercion ---")
+
+    trait Base {
+        fn base_method(&self) -> &'static str { "Base" }
+    }
+
+    trait Derived: Base {
+        fn derived_method(&self) -> &'static str { "Derived" }
+    }
+
+    struct Impl;
+
+    impl Base for Impl {}
+    impl Derived for Impl {}
+
+    fn takes_base(b: &dyn Base) { println!("  Base: {}", b.base_method()) }
+    fn takes_derived(d: &dyn Derived) { println!("  Derived: {}", d.derived_method()) }
+
+    let impl_obj = Impl;
+    takes_base(&impl_obj)
+    takes_derived(&impl_obj)
+
+    // Coercion from &dyn Derived to &dyn Base
+    let derived_obj: &dyn Derived = &impl_obj
+    let base_obj: &dyn Base = derived_obj
+    println!("  Coerced: {}", base_obj.base_method())
+
+    // ===== FUNDAMENTAL TRAITS =====
+    println!("\n--- Fundamental Traits ---")
+
+    // Fundamental traits: Fn, FnMut, FnOnce, Sized, Copy, Clone, Send, Sync, Unpin
+    // Have special compiler treatment
+
+    // Fn traits
+    let closure = |x: i32| x + 1;
+    fn call_fn<F: Fn(i32) -> i32>(f: F, x: i32) -> i32 { f(x) }
+    println!("  Fn: {}", call_fn(closure, 5))
+
+    let mut counter = 0
+    let mut_fn = || { counter += 1; counter }
+    fn call_fn_mut<F: FnMut() -> i32>(mut f: F) -> i32 { f() }
+    println!("  FnMut: {}", call_fn_mut(mut_fn))
+    println!("  FnMut: {}", call_fn_mut(mut_fn))
+
+    let once_fn = || { println!("  Called once"); 42 }
+    fn call_fn_once<F: FnOnce() -> i32>(f: F) -> i32 { f() }
+    println!("  FnOnce: {}", call_fn_once(once_fn))
+
+    // ===== UNSIZED TYPES =====
+    println!("\n--- Unsized Types ---")
+
+    trait Print {
+        fn print(&self);
+    }
+
+    impl Print for str {
+        fn print(&self) { println!("  str: {}", self) }
+    }
+
+    impl Print for [i32] {
+        fn print(&self) { println!("  slice: {:?}", self) }
+    }
+
+    let s: &dyn Print = "hello"
+    s.print()
+
+    let arr: &dyn Print = &[1, 2, 3]
+    arr.print()
+
+    // ===== OBJECT SAFETY =====
+    println!("\n--- Object Safety ---")
+
+    // Object safe: methods don't use Self except as &self/&mut self/Box<Self>
+    trait ObjectSafe {
+        fn method(&self);
+        fn method_mut(&mut self);
+        fn method_box(self: Box<Self>);
+    }
+
+    // Not object safe:
+    // trait NotObjectSafe {
+    //     fn new() -> Self;  // Uses Self as return
+    //     fn take_self(self);  // Takes Self by value
+    //     fn generic<T>(&self, t: T);  // Generic method
+    // }
+
+    // ===== TRAIT UPPER BOUNDS =====
+    println!("\n--- Trait Upper Bounds ---")
+
+    // T: Trait + 'static
+    fn requires_static<T: Send + Sync + 'static>(_t: T) {}
+
+    let owned = String::from("hello")
+    requires_static(owned)
+
+    // T: Trait + ?Sized
+    fn takes_unsized<T: ?Sized + std::fmt::Debug>(t: &T) {
+        println!("  Unsized: {:?}", t)
+    }
+
+    takes_unsized("str")
+    takes_unsized(&[1, 2, 3])
+
+    // ===== OVERLAPPING IMPLEMENTATIONS =====
+    println!("\n--- Coherence Rules ---")
+
+    // These would conflict (coherence):
+    // impl<T> Trait for T { }
+    // impl Trait for i32 { }  // Overlaps with blanket
+
+    // But this is OK (specialization):
+    // impl<T: Clone> Trait for T { default fn method() {} }
+    // impl Trait for i32 { fn method() {} }
+
+    println!("  Coherence rules demonstrated")
+
+    // ===== SUPER TRAITS WITH BOUNDS =====
+    println!("\n--- Supertraits with Bounds ---")
+
+    trait Graph: Sized {
+        type Node: std::fmt::Debug + Clone;
+        type Edge: std::fmt::Debug;
+
+        fn nodes(&self) -> Vec<Self::Node>;
+        fn edges(&self) -> Vec<Self::Edge>;
+    }
+
+    struct SimpleGraph {
+        nodes: Vec<String>,
+        edges: Vec<(String, String)>,
+    }
+
+    impl Graph for SimpleGraph {
+        type Node = String;
+        type Edge = (String, String);
+
+        fn nodes(&self) -> Vec<String> { self.nodes.clone() }
+        fn edges(&self) -> Vec<(String, String)> { self.edges.clone() }
+    }
+
+    let graph = SimpleGraph {
+        nodes: vec!["A".to_string(), "B".to_string()],
+        edges: vec![("A".to_string(), "B".to_string())],
+    }
+
+    println!("  Graph nodes: {:?}", graph.nodes())
+    println!("  Graph edges: {:?}", graph.edges())
+
+    println!("\n✅ Advanced Traits example completed!")
+}
+
+mod async_trait {
+    pub use async_trait_macro::async_trait;
+}
+
+mod async_trait_macro {
+    pub macro async_trait($($item:tt)*) {
+        $($item)*
+    }
+}

@@ -1,0 +1,61 @@
+// Example 1: Variables, Constants, and Type Inference
+// Demonstrates: let, mut, const, type annotations, shadowing
+
+fn main() {
+    println!("=== Variables & Constants ===\n")
+
+    // Type inference
+    let name = "NOVA"
+    let version = 1.0
+    let is_awesome = true
+
+    println!("Inferred: name={}, version={}, awesome={}", name, version, is_awesome)
+
+    // Explicit type annotations
+    let count: i64 = 42
+    let ratio: f64 = 3.14159
+    let flag: bool = false
+    let character: char = '🚀'
+
+    println!("Explicit: count={}, ratio={}, flag={}, char={}", count, ratio, flag, character)
+
+    // Mutable variables
+    let mut counter = 0
+    counter = counter + 1
+    counter += 5
+    println!("Mutable counter: {}", counter)
+
+    // Constants (must be typed, evaluated at compile time)
+    const PI: f64 = 3.141592653589793
+    const MAX_USERS: u32 = 10_000
+    const APP_NAME: &str = "NOVA App"
+
+    println!("Constants: PI={}, MAX={}, NAME={}", PI, MAX_USERS, APP_NAME)
+
+    // Shadowing (reusing name with different type/value)
+    let value = 42
+    println!("Original value: {}", value)
+
+    let value = "hello"  // shadows previous, different type
+    println!("Shadowed value: {}", value)
+
+    let value = value.len()  // shadows again, computes length
+    println!("Shadowed again: {}", value)
+
+    // Multiple bindings
+    let (x, y, z) = (1, 2, 3)
+    println!("Tuple destructuring: x={}, y={}, z={}", x, y, z)
+
+    // Ignore with underscore
+    let (a, _, c) = (10, 20, 30)
+    println!("Ignored middle: a={}, c={}", a, c)
+
+    // Reference bindings
+    let original = String::from("hello")
+    let reference = &original
+    let mut_ref = &mut String::from("world")
+
+    println!("Reference: {}, Mutable ref: {}", reference, mut_ref)
+
+    println!("\n✅ Variables & Constants example completed!")
+}

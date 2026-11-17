@@ -1,0 +1,273 @@
+// Example 2: Advanced Effects
+// Demonstrates: effect rows, handler composition, algebraic effects, effect inference
+
+fn main() {
+    println!("=== Advanced Effects ===\n")
+
+    // ===== EFFECT ROWS =====
+    println!("--- Effect Rows ---")
+
+    // Effect rows track sets of effects
+    type ConsoleEffect = effect { print: String -> (), read: () -> String }
+    type StateEffect<S> = effect { get: () -> S, set: S -> () }
+    type AsyncEffect = effect { spawn: Future -> JoinHandle, sleep: Duration -> () }
+
+    // Row polymorphism
+    fn polymorphic<R: Effects>(x: i32) -> i32 with R {
+        x + 1
+    }
+
+    // Can be used with any effect row
+    let _ = polymorphic::<{}> (1)  // Pure
+    let _ = polymorphic::<ConsoleEffect> (1)  // With Console
+    let _ = polymorphic::<ConsoleEffect + StateEffect<i32>> (1)  // Multiple
+
+    println!("  Effect rows shown")
+
+    // ===== ALGEBRAIC EFFECTS =====
+    println!("\n--- Algebraic Effects ---")
+
+    // Effects as algebraic operations
+    effect Choice {
+        fn choose<T>(options: Vec<T>) -> T;
+    }
+
+    // Handler for Choice: non-determinism
+    handler ListChoice for Choice {
+        fn choose<T>(options: Vec<T>) -> T {
+            // Return all options as list
+            // In real implementation, would use continuation
+            options.into_iter().next().unwrap()
+        }
+    }
+
+    // Handler: first option
+    handler FirstChoice for Choice {
+        fn choose<T>(options: Vec<T>) -> T {
+            options[0].clone()
+        }
+    }
+
+    fn make_choice() -> i32 with Choice {
+        Choice::choose(vec![1, 2, 3])
+    }
+
+    // Different handlers give different behaviors
+    let result1 = with ListChoice { make_choice() }
+    let result2 = with FirstChoice { make_choice() }
+    println!("  ListChoice: {}, FirstChoice: {}", result1, result2)
+
+    // ===== EFFECT HANDLERS AS VALUES =====
+    println!("\n--- Handlers as Values ---")
+
+    // Handlers can be passed around
+    struct ChoiceHandler<T> {
+        choose_fn: fn(Vec<T>) -> T,
+    }
+
+    impl<T> ChoiceHandler<T> {
+        fn handle<R>(self, f: impl FnOnce() -> R with Choice) -> R {
+            // Install handler and run
+            with handler Choice {
+                fn choose(options: Vec<T>) -> T {
+                    (self.choose_fn)(options)
+                }
+            } { f() }
+        }
+    }
+
+    let random_handler = ChoiceHandler {
+        choose_fn: |opts| opts[rand::random::<usize>() % opts.len()],
+    }
+
+    println!("  Handler as value shown")
+
+    // ===== RESUMPTION-BASED HANDLERS =====
+    println!("\n--- Resumption-Based Handlers ---")
+
+    // Handlers can resume continuations
+    effect Yield<T> {
+        fn yield_(value: T) -> ();
+    }
+
+    handler CollectYield<T> for Yield<T> {
+        fn yield_(value: T) -> () {
+            // Capture value and resume
+            self.values.push(value)
+            // resume(())
+        }
+    }
+
+    fn producer() -> () with Yield<i32> {
+        for i in 1..=5 {
+            Yield::yield_(i)
+        }
+    }
+
+    // Run and collect
+    let collected = with handler Yield<i32> {
+        values: Vec<i32> = Vec::new()
+        fn yield_(value: i32) -> () {
+            values.push(value)
+            // resume(())
+        }
+    } {
+        producer()
+    }
+    println!("  Collected: {:?}", collected)
+
+    // ===== EFFECT INTERPRETERS =====
+    println!("\n--- Effect Interpreters ---")
+
+    // Multiple interpretations of same effect
+    effect Log {
+        fn log(level: Level, msg: String) -> ();
+    }
+
+    enum Level { Debug, Info, Warn, Error }
+
+    // Console interpreter
+    handler ConsoleLog for Log {
+        fn log(level: Level, msg: String) -> () {
+            println!("[{:?}] {}", level, msg)
+        }
+    }
+
+    // File interpreter
+    handler FileLog for Log {
+        fn log(level: Level, msg: String) -> () {
+            // Write to file
+            eprintln!("FILE [{:?}] {}", level, msg)
+        }
+    }
+
+    // Structured logging interpreter
+    handler JsonLog for Log {
+        fn log(level: Level, msg: String) -> () {
+            println!("{{\"level\": \"{:?}\", \"message\": \"{}\"}}", level, msg)
+        }
+    }
+
+    fn do_logging() -> () with Log {
+        Log::log(Level::Info, "Started".to_string())
+        Log::log(Level::Debug, "Debug info".to_string())
+        Log::log(Level::Error, "Error!".to_string())
+    }
+
+    with ConsoleLog { do_logging() }
+    with FileLog { do_logging() }
+
+    // ===== EFFECT SAFETY AND SOUNDNESS =====
+    println!("\n--- Effect Safety ---")
+
+    // Linear effects (must be handled exactly once)
+    linear effect Resource {
+        fn acquire() -> Handle;
+        fn release(Handle) -> ();
+    }
+
+    handler ResourceManager for Resource {
+        fn acquire() -> Handle {
+            // Allocate resource
+            Handle::new()
+        }
+        fn release(h: Handle) -> () {
+            // Free resource
+            h.free()
+        }
+    }
+
+    // Effect parametricity
+    fn run_with_logging<F, R>(f: F) -> R
+    where F: FnOnce() -> R with Log {
+        with ConsoleLog { f() }
+    }
+
+    println!("  Effect safety shown")
+
+    // ===== EFFECT INFERENCE ALGORITHM =====
+    println!("\n--- Effect Inference ---")
+
+    // Hindley-Milner style inference for effects
+    //
+    // 1. Assign effect variables to each function
+    // 2. Generate constraints from effect operations
+    // 3. Solve constraints (unification)
+    // 4. Generalize over free effect variables
+    //
+    // Example:
+    // fn foo() { print("a"); bar() }
+    // fn bar() { print("b") }
+    //
+    // Constraints:
+    //   foo ~ {Console} ∪ bar
+    //   bar ~ {Console}
+    //
+    // Solution:
+    //   bar = {Console}
+    //   foo = {Console}
+
+    println!("  Effect inference algorithm shown")
+
+    // ===== EFFECT OPTIMIZATION =====
+    println!("\n--- Effect Optimization ---")
+
+    // Compiler can optimize effectful code:
+    //
+    // 1. Effect elimination: Pure functions inlined
+    // 2. Handler fusion: Combine adjacent handlers
+    // 3. Effect specialization: Specialize for concrete handlers
+    // 4. Dead effect removal: Remove unused effects
+
+    // Example optimization:
+    // with ConsoleIO {
+    //   with ConsoleIO { f() }
+    // }
+    // -> with ConsoleIO { f() }
+
+    println!("  Effect optimization shown")
+
+    // ===== REAL-WORLD EXAMPLE: ASYNC RUNTIME =====
+    println!("\n--- Async Runtime as Effect ---")
+
+    effect AsyncRuntime {
+        fn spawn<F: Future + Send + 'static>(f: F) -> JoinHandle<F::Output>;
+        fn sleep(duration: Duration) -> ();
+        fn block_on<F: Future>(f: F) -> F::Output;
+    }
+
+    handler TokioRuntime for AsyncRuntime {
+        fn spawn<F: Future + Send + 'static>(f: F) -> JoinHandle<F::Output> {
+            tokio::spawn(f)
+        }
+        fn sleep(duration: Duration) -> () {
+            tokio::time::sleep(duration)
+        }
+        fn block_on<F: Future>(f: F) -> F::Output {
+            tokio::runtime::Runtime::new().unwrap().block_on(f)
+        }
+    }
+
+    // Application code uses abstract AsyncRuntime
+    async fn app_logic() -> String with AsyncRuntime {
+        AsyncRuntime::sleep(Duration::from_millis(10)).await
+        "done".to_string()
+    }
+
+    // Can swap runtime without changing app code
+    // with TokioRuntime { app_logic() }
+    // with AsyncStdRuntime { app_logic() }
+    // with CustomRuntime { app_logic() }
+
+    println!("  Async runtime effect shown")
+
+    println!("\n✅ Advanced Effects example completed!")
+}
+
+mod rand {
+    use std::sync::atomic::{AtomicUsize, Ordering}
+    static SEED: AtomicUsize = AtomicUsize::new(1)
+    pub fn random<T>() -> T where T: From<usize> {
+        T::from(SEED.fetch_add(1, Ordering::Relaxed))
+    }
+}

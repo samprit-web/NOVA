@@ -8,8 +8,8 @@
 
 use std::collections::HashMap;
 
-use crate::{Span, FileId, NodeId, Type};
-use crate::hir::{ItemId, VarId, Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, WhereClause, GenericArgs, GenericArg, Lifetime, AttrStyle, Attribute, MetaItem};
+use crate::{Span, FileId, NodeId, Type, GenericArg, GenericArgs};
+use crate::hir::{ItemId, VarId, Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, WhereClause, Lifetime, AttrStyle, Attribute, MetaItem};
 
 /// MIR program
 #[derive(Debug, Clone)]

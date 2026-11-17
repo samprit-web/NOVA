@@ -1,0 +1,295 @@
+// Example 1: Trait Basics
+// Demonstrates: trait definition, implementation, trait bounds, default methods, trait objects
+
+fn main() {
+    println!("=== Trait Basics ===\n")
+
+    // ===== BASIC TRAIT DEFINITION =====
+    println!("--- Basic Trait Definition ---")
+
+    trait Drawable {
+        fn draw(&self) -> String;
+        fn area(&self) -> f64;
+    }
+
+    struct Circle {
+        radius: f64,
+    }
+
+    struct Rectangle {
+        width: f64,
+        height: f64,
+    }
+
+    impl Drawable for Circle {
+        fn draw(&self) -> String {
+            format!("Circle(r={})", self.radius)
+        }
+
+        fn area(&self) -> f64 {
+            std::f64::consts::PI * self.radius * self.radius
+        }
+    }
+
+    impl Drawable for Rectangle {
+        fn draw(&self) -> String {
+            format!("Rect(w={}, h={})", self.width, self.height)
+        }
+
+        fn area(&self) -> f64 {
+            self.width * self.height
+        }
+    }
+
+    let circle = Circle { radius: 5.0 }
+    let rect = Rectangle { width: 10.0, height: 20.0 }
+
+    println!("  Circle: {}", circle.draw())
+    println!("  Circle area: {}", circle.area())
+    println!("  Rect: {}", rect.draw())
+    println!("  Rect area: {}", rect.area())
+
+    // ===== TRAIT BOUNDS IN FUNCTIONS =====
+    println!("\n--- Trait Bounds ---")
+
+    fn draw_shape(shape: &impl Drawable) {
+        println!("  Drawing: {}", shape.draw())
+    }
+
+    fn draw_shapes(shapes: &[&dyn Drawable]) {
+        for shape in shapes {
+            println!("  {}", shape.draw())
+        }
+    }
+
+    draw_shape(&circle)
+    draw_shape(&rect)
+
+    let shapes: Vec<&dyn Drawable> = vec![&circle, &rect]
+    draw_shapes(&shapes)
+
+    // ===== DEFAULT IMPLEMENTATIONS =====
+    println!("\n--- Default Implementations ---")
+
+    trait Printable {
+        fn print(&self) {
+            println!("  Default print: {:?}", self)
+        }
+
+        fn debug_print(&self) {
+            println!("  Debug: {:?}", self)
+        }
+    }
+
+    #[derive(Debug)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    impl Printable for Point {}
+
+    let p = Point { x: 1, y: 2 }
+    p.print()
+    p.debug_print()
+
+    // Override default
+    impl Printable for Circle {
+        fn print(&self) {
+            println!("  Circle at radius {}", self.radius)
+        }
+    }
+
+    circle.print()
+
+    // ===== TRAIT INHERITANCE =====
+    println!("\n--- Trait Inheritance ---")
+
+    trait Shape: Drawable {
+        fn perimeter(&self) -> f64;
+    }
+
+    impl Shape for Circle {
+        fn perimeter(&self) -> f64 {
+            2.0 * std::f64::consts::PI * self.radius
+        }
+    }
+
+    impl Shape for Rectangle {
+        fn perimeter(&self) -> f64 {
+            2.0 * (self.width + self.height)
+        }
+    }
+
+    fn describe_shape(shape: &impl Shape) {
+        println!("  {}: area={:.2}, perimeter={:.2}", shape.draw(), shape.area(), shape.perimeter())
+    }
+
+    describe_shape(&circle)
+    describe_shape(&rect)
+
+    // ===== MULTIPLE TRAIT BOUNDS =====
+    println!("\n--- Multiple Trait Bounds ---")
+
+    use std::fmt::Display
+
+    fn print_and_draw<T: Drawable + Display>(item: &T) {
+        println!("  Display: {}", item)
+        println!("  Draw: {}", item.draw())
+    }
+
+    impl Display for Circle {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "Circle({})", self.radius)
+        }
+    }
+
+    print_and_draw(&circle)
+
+    // Where clause
+    fn process<T>(item: T)
+    where T: Drawable + Display + Clone + Send + Sync + 'static {
+        println!("  Processing: {}", item)
+    }
+
+    process(circle)
+
+    // ===== ASSOCIATED TYPES =====
+    println!("\n--- Associated Types ---")
+
+    trait Container {
+        type Item;
+        fn get(&self) -> &Self::Item;
+        fn set(&mut self, item: Self::Item);
+    }
+
+    struct BoxContainer<T> {
+        value: T,
+    }
+
+    impl<T> Container for BoxContainer<T> {
+        type Item = T;
+        fn get(&self) -> &T { &self.value }
+        fn set(&mut self, item: T) { self.value = item }
+    }
+
+    let mut boxed = BoxContainer { value: 42 }
+    println!("  Value: {}", boxed.get())
+    boxed.set(100)
+    println!("  New value: {}", boxed.get())
+
+    // ===== OPERATOR TRAITS =====
+    println!("\n--- Operator Traits ---")
+
+    use std::ops::{Add, Sub, Mul, Neg, Index, IndexMut}
+
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    struct Vector2D {
+        x: f64,
+        y: f64,
+    }
+
+    impl Add for Vector2D {
+        type Output = Self;
+        fn add(self, other: Self) -> Self {
+            Vector2D { x: self.x + other.x, y: self.y + other.y }
+        }
+    }
+
+    impl Sub for Vector2D {
+        type Output = Self;
+        fn sub(self, other: Self) -> Self {
+            Vector2D { x: self.x - other.x, y: self.y - other.y }
+        }
+    }
+
+    impl Mul<f64> for Vector2D {
+        type Output = Self;
+        fn mul(self, scalar: f64) -> Self {
+            Vector2D { x: self.x * scalar, y: self.y * scalar }
+        }
+    }
+
+    impl Neg for Vector2D {
+        type Output = Self;
+        fn neg(self) -> Self {
+            Vector2D { x: -self.x, y: -self.y }
+        }
+    }
+
+    impl Index<usize> for Vector2D {
+        type Output = f64;
+        fn index(&self, index: usize) -> &f64 {
+            match index {
+                0 => &self.x,
+                1 => &self.y,
+                _ => panic!("Index out of bounds"),
+            }
+        }
+    }
+
+    impl IndexMut<usize> for Vector2D {
+        fn index_mut(&mut self, index: usize) -> &mut f64 {
+            match index {
+                0 => &mut self.x,
+                1 => &mut self.y,
+                _ => panic!("Index out of bounds"),
+            }
+        }
+    }
+
+    let v1 = Vector2D { x: 1.0, y: 2.0 }
+    let v2 = Vector2D { x: 3.0, y: 4.0 }
+
+    println!("  v1 + v2 = {:?}", v1 + v2)
+    println!("  v1 - v2 = {:?}", v1 - v2)
+    println!("  v1 * 2.0 = {:?}", v1 * 2.0)
+    println!("  -v1 = {:?}", -v1)
+    println!("  v1[0] = {}, v1[1] = {}", v1[0], v1[1])
+
+    // ===== TRAIT OBJECTS =====
+    println!("\n--- Trait Objects ---")
+
+    fn draw_dyn(shape: &dyn Drawable) {
+        println!("  Trait object: {}", shape.draw())
+    }
+
+    draw_dyn(&Circle { radius: 7.0 })
+    draw_dyn(&Rectangle { width: 1.0, height: 1.0 })
+
+    // Trait object safety
+    // trait NotObjectSafe { fn new() -> Self; }  // Not object safe
+
+    // ===== MARKER TRAITS =====
+    println!("\n--- Marker Traits ---")
+
+    // Send, Sync, Copy, Clone, Sized, Unpin
+
+    #[derive(Copy, Clone)]
+    struct Copyable {
+        value: i32,
+    }
+
+    let c = Copyable { value: 42 }
+    let c2 = c  // Copy
+    println!("  Copied: {}", c2.value)
+
+    // ===== AUTO TRAITS =====
+    println!("\n--- Auto Traits ---")
+
+    // Unpin, UnwindSafe, RefUnwindSafe
+    // Automatically implemented based on fields
+
+    struct MyStruct {
+        data: i32,
+    }
+    // MyStruct automatically implements Send, Sync, Unpin, etc.
+
+    // Negative trait bounds (not directly supported, but can simulate)
+    // trait NotSend { }
+    // impl !Send for MyStruct { }  // Nightly only
+
+    println!("  Auto traits demonstrated")
+
+    println!("\n✅ Trait Basics example completed!")
+}

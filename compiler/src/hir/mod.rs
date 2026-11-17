@@ -9,8 +9,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{Span, FileId, NodeId, Type};
-use crate::ast::{Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, WhereClause, GenericArgs, GenericArg, Lifetime, AttrStyle, Attribute, MetaItem};
+use crate::{Span, FileId, NodeId};
+use crate::ast::{Ident, Visibility, Constness, Asyncness, Unsafety, Mutability, GenericParam, Lifetime, AttrStyle, Attribute, MetaItem};
+
+pub use crate::ast::{GenericArg, WhereClause, GenericArgs};
 
 /// HIR program
 #[derive(Debug, Clone)]

@@ -1,0 +1,198 @@
+// Example 2: Procedural Macros
+// Demonstrates: derive macros, attribute macros, function-like macros, syn/quote
+
+fn main() {
+    println!("=== Procedural Macros ===\n")
+
+    // ===== DERIVE MACROS =====
+    println!("--- Derive Macros ---")
+
+    // In real implementation, this would be in a separate proc-macro crate:
+    //
+    // // Cargo.toml
+    // [lib]
+    // proc-macro = true
+    //
+    // // src/lib.nova
+    // use proc_macro::TokenStream;
+    // use quote::quote;
+    // use syn::{parse_macro_input, DeriveInput};
+    //
+    // #[proc_macro_derive(DebugPrint)]
+    // pub fn debug_print_derive(input: TokenStream) -> TokenStream {
+    //     let input = parse_macro_input!(input as DeriveInput);
+    //     let name = &input.ident;
+    //     let expanded = quote! {
+    //         impl std::fmt::Debug for #name {
+    //             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    //                 write!(f, "{}", stringify!(#name))
+    //             }
+    //         }
+    //     };
+    //     TokenStream::from(expanded)
+    // }
+
+    // Usage:
+    // #[derive(DebugPrint)]
+    // struct MyStruct { value: i32 }
+
+    println!("  Derive macro pattern shown (requires proc-macro crate)")
+
+    // ===== ATTRIBUTE MACROS =====
+    println!("\n--- Attribute Macros ---")
+
+    // #[proc_macro_attribute]
+    // pub fn route(path: TokenStream, input: TokenStream) -> TokenStream {
+    //     let path_str = path.to_string().trim_matches('"').to_string();
+    //     let fn_item = parse_macro_input!(input as ItemFn);
+    //     let fn_name = &fn_item.sig.ident;
+    //     let expanded = quote! {
+    //         #fn_item
+    //         inventory::submit! {
+    //             Route { path: #path_str, handler: #fn_name }
+    //         }
+    //     };
+    //     TokenStream::from(expanded)
+    // }
+
+    // Usage:
+    // #[route("/api/users")]
+    // async fn get_users() -> Json<Vec<User>> { ... }
+
+    println!("  Attribute macro pattern shown")
+
+    // ===== FUNCTION-LIKE MACROS =====
+    println!("\n--- Function-like Macros ---")
+
+    // #[proc_macro]
+    // pub fn sql(input: TokenStream) -> TokenStream {
+    //     let query = input.to_string();
+    //     // Parse and validate SQL at compile time
+    //     let expanded = quote! {
+    //         compile_time_checked_query!(#query)
+    //     };
+    //     TokenStream::from(expanded)
+    // }
+
+    // Usage:
+    // let query = sql!("SELECT * FROM users WHERE id = ?");
+
+    println!("  Function-like macro pattern shown")
+
+    // ===== SYN AND QUOTE =====
+    println!("\n--- Syn and Quote ---")
+    println!("  syn: Parses Nova code into AST")
+    println!("  quote: Generates Nova code from AST")
+    println!("  ")
+    println!("  Example AST manipulation:")
+    println!("  let ast: ItemFn = syn::parse(input)?;")
+    println!("  let name = &ast.sig.ident;")
+    println!("  let expanded = quote! {")
+    println!("      fn #name() {{ println!(\"generated\"); }}")
+    println!("  };")
+
+    // ===== MACRO HELPERS =====
+    println!("\n--- Macro Helpers ---")
+
+    // Common patterns in procedural macros:
+    //
+    // // Generate unique names
+    // let ident = Ident::new(&format!("__{}_generated", name), Span::call_site());
+    //
+    // // Get attributes
+    // let attrs = &input.attrs;
+    // let doc = attrs.iter().find(|a| a.path.is_ident("doc"));
+    //
+    // // Handle generics
+    // let generics = &input.generics;
+    // let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    //
+    // // Error reporting
+    // return Err(syn::Error::new_spanned(&input, "Expected struct")).into();
+
+    println!("  Helper patterns shown")
+
+    // ===== CUSTOM DERIVE EXAMPLE =====
+    println!("\n--- Custom Derive Example ---")
+
+    // Simulated derive macro expansion
+    #[derive(Debug, Clone, PartialEq)]
+    struct User {
+        id: u64,
+        name: String,
+        email: String,
+    }
+
+    // What a derive macro might generate:
+    impl User {
+        fn builder() -> UserBuilder {
+            UserBuilder::default()
+        }
+    }
+
+    #[derive(Default)]
+    struct UserBuilder {
+        id: Option<u64>,
+        name: Option<String>,
+        email: Option<String>,
+    }
+
+    impl UserBuilder {
+        fn id(mut self, id: u64) -> Self { self.id = Some(id); self }
+        fn name(mut self, name: String) -> Self { self.name = Some(name); self }
+        fn email(mut self, email: String) -> Self { self.email = Some(email); self }
+        fn build(self) -> Result<User, String> {
+            Ok(User {
+                id: self.id.ok_or("id required")?,
+                name: self.name.ok_or("name required")?,
+                email: self.email.ok_or("email required")?,
+            })
+        }
+    }
+
+    let user = User::builder()
+        .id(1)
+        .name("Alice".to_string())
+        .email("alice@example.com".to_string())
+        .build()
+        .unwrap();
+
+    println!("  Built user: {:?}", user)
+
+    // ===== MACRO RULES VS PROC MACROS =====
+    println!("\n--- Macro Rules vs Proc Macros ---")
+    println!("  macro_rules!:")
+    println!("    - Pattern matching on token trees")
+    println!("    - Limited to declarative transformations")
+    println!("    - Hygienic by default")
+    println!("    - Easier to write and debug")
+    println!("  ")
+    println!("  Procedural macros:")
+    println!("    - Full AST access via syn")
+    println!("    - Can generate arbitrary code")
+    println!("    - Can do compile-time computation")
+    println!("    - Require separate crate (proc-macro = true)")
+    println!("    - More powerful but complex")
+
+    // ===== TESTING MACROS =====
+    println!("\n--- Testing Macros ---")
+    println!("  use trybuild for compile-fail tests:")
+    println!("  #[test]")
+    println!("  fn test_macro_expansion() {")
+    println!("      let t = trybuild::TestCases::new();")
+    println!("      t.compile_fail(\"tests/fail/*.nova\");")
+    println!("      t.pass(\"tests/pass/*.nova\");")
+    println!("  }")
+
+    // ===== COMMON CRATES =====
+    println!("\n--- Common Proc Macro Crates ---")
+    println!("  syn: Parsing Nova code")
+    println!("  quote: Code generation")
+    println!("  proc-macro2: TokenStream types")
+    println!("  proc-macro-error: Better error messages")
+    println!("  darling: Derive macro helpers")
+    println!("  quote: Code generation")
+    println!("  paste: Identifier concatenation")
+
+    println!("\n✅ Procedural Macros example completed!")
+}

@@ -1,0 +1,290 @@
+// Example 2: Advanced Dependent Types
+// Demonstrates: indexed types, singleton types, type families, universe polymorphism
+
+fn main() {
+    println!("=== Advanced Dependent Types ===\n")
+
+    // ===== INDEXED TYPES =====
+    println!("--- Indexed Types ---")
+
+    // Vector indexed by length
+    struct Vec<T, N> {
+        data: Vec<T>,
+        _len: std::marker::PhantomData<N>,
+    }
+
+    // Length witnesses
+    trait Length {}
+    struct Z;
+    struct S<N>(std::marker::PhantomData<N>);
+    impl Length for Z {}
+    impl<N: Length> Length for S<N> {}
+
+    impl<T, N: Length> Vec<T, N> {
+        fn nil() -> Vec<T, Z> {
+            Vec { data: Vec::new(), _len: std::marker::PhantomData }
+        }
+
+        fn cons(self, x: T) -> Vec<T, S<N>> {
+            let mut data = self.data
+            data.push(x)
+            Vec { data, _len: std::marker::PhantomData }
+        }
+
+        fn head(&self) -> Option<&T>
+        where N: NonZero {
+            self.data.first()
+        }
+
+        fn tail(self) -> Vec<T, N::Pred>
+        where N: NonZero {
+            Vec { data: self.data.into_iter().skip(1).collect(), _len: std::marker::PhantomData }
+        }
+    }
+
+    trait NonZero {}
+    impl<N: Length> NonZero for S<N> {}
+    trait Pred { type Out: Length; }
+    impl<N: Length> Pred for S<N> { type Out = N; }
+
+    println!("  Indexed Vec pattern shown")
+
+    // ===== SINGLETON TYPES =====
+    println!("\n--- Singleton Types ---")
+
+    // Type with exactly one value
+    struct Singleton<T> {
+        value: T,
+    }
+
+    impl<T: PartialEq + Clone> Singleton<T> {
+        fn new(value: T) -> Self {
+            Singleton { value }
+        }
+
+        fn get(&self) -> &T {
+            &self.value
+        }
+    }
+
+    // Equality of singletons implies equality of values
+    fn singleton_eq<T: PartialEq>(a: &Singleton<T>, b: &Singleton<T>) -> bool {
+        a.value == b.value
+    }
+
+    let s1 = Singleton::new(42)
+    let s2 = Singleton::new(42)
+    let s3 = Singleton::new(24)
+    println!("  s1 == s2: {}", singleton_eq(&s1, &s2))
+    println!("  s1 == s3: {}", singleton_eq(&s1, &s3))
+
+    // ===== TYPE FAMILIES =====
+    println!("\n--- Type Families ---")
+
+    // Type family: Result<T, E> where E depends on T
+    trait ResultFamily {
+        type Ok;
+        type Err;
+        fn ok(self) -> Option<Self::Ok>;
+        fn err(self) -> Option<Self::Err>;
+    }
+
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+
+    impl<T, E> ResultFamily for Result<T, E> {
+        type Ok = T;
+        type Err = E;
+        fn ok(self) -> Option<T> { match self { Result::Ok(v) => Some(v), _ => None } }
+        fn err(self) -> Option<E> { match self { Result::Err(e) => Some(e), _ => None } }
+    }
+
+    // Associated type family
+    trait Container {
+        type Item;
+        fn get(&self) -> Option<&Self::Item>;
+    }
+
+    struct Box<T>(T);
+    impl<T> Container for Box<T> {
+        type Item = T;
+        fn get(&self) -> Option<&T> { Some(&self.0) }
+    }
+
+    println!("  Type families shown")
+
+    // ===== UNIVERSE POLYMORPHISM =====
+    println!("\n--- Universe Polymorphism ---")
+
+    // In Nova, types live in universes:
+    // Type0 : Type1 : Type2 : ...
+    // Functions can be polymorphic over universe levels
+
+    trait TypeLevel {}
+    struct Type0;
+    struct Type1;
+    struct Type2;
+    impl TypeLevel for Type0 {}
+    impl TypeLevel for Type1 {}
+    impl TypeLevel for Type2 {}
+
+    // Universe-polymorphic identity
+    fn uid<U: TypeLevel, T>(x: T) -> T {
+        x
+    }
+
+    println!("  Universe polymorphism pattern shown")
+
+    // ===== EQUALITY TYPES =====
+    println!("\n--- Equality Types ---")
+
+    // Heterogeneous equality
+    struct HEq<A, B> {
+        _phantom: std::marker::PhantomData<(A, B)>,
+    }
+
+    impl<A, B> HEq<A, B> {
+        fn refl() -> HEq<A, A> {
+            HEq { _phantom: std::marker::PhantomData }
+        }
+
+        fn sym(self) -> HEq<B, A> {
+            HEq { _phantom: std::marker::PhantomData }
+        }
+
+        fn trans<C>(self, other: HEq<B, C>) -> HEq<A, C> {
+            HEq { _phantom: std::marker::PhantomData }
+        }
+
+        fn subst<T, F>(self, f: F) -> T
+        where F: FnOnce() -> T {
+            f()
+        }
+    }
+
+    let eq = HEq::<i32, i32>::refl()
+    println!("  Heterogeneous equality shown")
+
+    // ===== INDUCTIVE FAMILIES =====
+    println!("\n--- Inductive Families ---")
+
+    // Finite set family
+    enum Fin<N> {
+        FZ(std::marker::PhantomData<N>),  // Zero
+        FS(Box<Fin<N>>),                   // Successor
+    }
+
+    impl<N> Fin<N> {
+        fn to_usize(&self) -> usize {
+            match self {
+                Fin::FZ(_) => 0,
+                Fin::FS(inner) => 1 + inner.to_usize(),
+            }
+        }
+    }
+
+    // Fin<3> has values: FZ, FS(FZ), FS(FS(FZ))
+    let fin1 = Fin::FZ(std::marker::PhantomData::<()>)  // Fin<1>
+    let fin2 = Fin::FS(Box::new(Fin::FZ(std::marker::PhantomData)))  // Fin<2>
+    println!("  Fin values: {}, {}", fin1.to_usize(), fin2.to_usize())
+
+    // ===== VECTORS WITH PROOFS =====
+    println!("\n--- Vectors with Proofs ---")
+
+    struct SortedVec<T, N> {
+        data: [T; N],
+        _sorted: Proof<Sorted<T, N>>,
+    }
+
+    // Proof object (erased at runtime)
+    struct Proof<P> {
+        _phantom: std::marker::PhantomData<P>,
+    }
+
+    // Sorted predicate (type-level)
+    trait Sorted<T, N> {}
+    impl<T: Ord> Sorted<T, 0> for () {}
+    impl<T: Ord> Sorted<T, 1> for () {}
+    // Would need more machinery for general N
+
+    // Insert maintaining sorted order
+    impl<T: Ord, N> SortedVec<T, N> {
+        fn insert(self, x: T) -> SortedVec<T, N> {
+            // In real implementation, would prove sortedness
+            self
+        }
+    }
+
+    println!("  SortedVec with proofs shown")
+
+    // ===== DEPENDENT PATTERN MATCHING =====
+    println!("\n--- Dependent Pattern Matching ---")
+
+    // Matching on indexed types refines indices
+    enum Expr<T> {
+        Lit(T),
+        Add(Box<Expr<T>>, Box<Expr<T>>),
+    }
+
+    fn eval<T: std::ops::Add<Output = T>>(e: Expr<T>) -> T {
+        match e {
+            Expr::Lit(x) => x,
+            Expr::Add(l, r) => eval(*l) + eval(*r),
+        }
+    }
+
+    let expr = Expr::Add(
+        Box::new(Expr::Lit(1)),
+        Box::new(Expr::Add(
+            Box::new(Expr::Lit(2)),
+            Box::new(Expr::Lit(3)),
+        )),
+    )
+    println!("  Eval: {}", eval(expr))
+
+    // ===== ERASED TYPES =====
+    println!("\n--- Erased Types ---")
+
+    // Types that exist only for type checking
+    #[derive(Clone, Copy)]
+    struct Erased<T> {
+        _phantom: std::marker::PhantomData<T>,
+    }
+
+    impl<T> Erased<T> {
+        fn new() -> Self {
+            Erased { _phantom: std::marker::PhantomData }
+        }
+    }
+
+    // Runtime representation is zero-sized
+    let erased = Erased::<Proof<Sorted<i32, 5>>>::new()
+    println!("  Erased type size: {}", std::mem::size_of_val(&erased))
+
+    // ===== COMPUTE AT COMPILE TIME =====
+    println!("\n--- Compile-Time Computation ---")
+
+    // Const generics enable compile-time computation
+    const fn fib(n: usize) -> usize {
+        match n {
+            0 => 0,
+            1 => 1,
+            _ => fib(n - 1) + fib(n - 2),
+        }
+    }
+
+    const FIB_10: usize = fib(10);
+    println!("  fib(10) = {} (computed at compile time)", FIB_10)
+
+    // Type-level computation via const generics
+    struct Computed<const N: usize>;
+    impl<const N: usize> Computed<N> {
+        const VALUE: usize = N * 2;
+    }
+
+    println!("  Computed<21>::VALUE = {}", Computed::<21>::VALUE)
+
+    println!("\n✅ Advanced Dependent Types example completed!")
+}

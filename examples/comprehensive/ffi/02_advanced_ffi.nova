@@ -1,0 +1,274 @@
+// Example 2: Advanced FFI
+// Demonstrates: C++ interop, async FFI, opaque types, memory ownership, bindgen
+
+fn main() {
+    println!("=== Advanced FFI ===\n")
+
+    // ===== OPAQUE TYPES =====
+    println!("--- Opaque Types ---")
+
+    // In C header:
+    // typedef struct MyHandle MyHandle;
+    // MyHandle* my_create();
+    // void my_destroy(MyHandle*);
+
+    // In Nova:
+    #[repr(C)]
+    pub struct MyHandle {
+        _private: [u8; 0],  // Zero-sized, can't be constructed directly
+    }
+
+    extern "C" {
+        fn my_create() -> *mut MyHandle;
+        fn my_destroy(handle: *mut MyHandle);
+        fn my_do_work(handle: *mut MyHandle) -> i32;
+    }
+
+    // Safe wrapper
+    struct MyHandleWrapper(*mut MyHandle);
+
+    impl MyHandleWrapper {
+        fn new() -> Option<Self> {
+            let ptr = unsafe { my_create() }
+            if ptr.is_null() { None } else { Some(Self(ptr)) }
+        }
+
+        fn do_work(&mut self) -> i32 {
+            unsafe { my_do_work(self.0) }
+        }
+    }
+
+    impl Drop for MyHandleWrapper {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe { my_destroy(self.0) }
+            }
+        }
+    }
+
+    println!("  Opaque type wrapper pattern shown")
+
+    // ===== C++ INTEROP =====
+    println!("\n--- C++ Interop ---")
+
+    // C++ side:
+    // extern "C" {
+    //     void* create_cpp_object();
+    //     void destroy_cpp_object(void* ptr);
+    //     int cpp_method(void* ptr, int arg);
+    // }
+
+    // Nova side:
+    #[repr(C)]
+    struct CppObject {
+        _private: [u8; 0],
+    }
+
+    extern "C" {
+        fn create_cpp_object() -> *mut CppObject;
+        fn destroy_cpp_object(ptr: *mut CppObject);
+        fn cpp_method(ptr: *mut CppObject, arg: i32) -> i32;
+    }
+
+    struct CppWrapper(*mut CppObject);
+
+    impl CppWrapper {
+        fn new() -> Option<Self> {
+            let ptr = unsafe { create_cpp_object() }
+            if ptr.is_null() { None } else { Some(Self(ptr)) }
+        }
+
+        fn method(&mut self, arg: i32) -> i32 {
+            unsafe { cpp_method(self.0, arg) }
+        }
+    }
+
+    impl Drop for CppWrapper {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe { destroy_cpp_object(self.0) }
+            }
+        }
+    }
+
+    println!("  C++ interop pattern shown")
+
+    // ===== ASYNC FFI =====
+    println!("\n--- Async FFI ---")
+
+    // C async function with callback
+    extern "C" {
+        fn async_operation(
+            callback: extern "C" fn(*mut u8, i32),
+            user_data: *mut u8,
+        );
+    }
+
+    // Nova async wrapper
+    use std::sync::{Arc, Mutex}
+    use std::task::Waker
+
+    struct AsyncOperation {
+        result: Arc<Mutex<Option<i32>>>,
+        waker: Arc<Mutex<Option<Waker>>>,
+    }
+
+    impl AsyncOperation {
+        fn new() -> Self {
+            AsyncOperation {
+                result: Arc::new(Mutex::new(None)),
+                waker: Arc::new(Mutex::new(None)),
+            }
+        }
+
+        extern "C" fn callback(user_data: *mut u8, result: i32) {
+            let op = unsafe { &*(user_data as *const AsyncOperation) }
+            *op.result.lock().unwrap() = Some(result)
+            if let Some(waker) = op.waker.lock().unwrap().take() {
+                waker.wake()
+            }
+        }
+
+        async fn run(&self) -> i32 {
+            std::task::poll_fn(|cx| {
+                *self.waker.lock().unwrap() = Some(cx.waker().clone())
+                unsafe { async_operation(Self::callback, self as *const _ as *mut u8) }
+                if let Some(r) = *self.result.lock().unwrap() {
+                    std::task::Poll::Ready(r)
+                } else {
+                    std::task::Poll::Pending
+                }
+            }).await
+        }
+    }
+
+    println!("  Async FFI pattern shown")
+
+    // ===== MEMORY OWNERSHIP =====
+    println!("\n--- Memory Ownership ---")
+
+    // Ownership transfer patterns:
+    //
+    // 1. C allocates, Rust frees
+    // extern "C" { fn c_alloc() -> *mut u8; fn c_free(*mut u8); }
+    // let ptr = unsafe { c_alloc() };
+    // let _guard = scopeguard::guard(ptr, |p| unsafe { c_free(p) });
+    //
+    // 2. Rust allocates, C frees
+    // let mut vec = vec![0u8; 100];
+    // extern "C" { fn c_take_ownership(*mut u8, usize); }
+    // unsafe { c_take_ownership(vec.as_mut_ptr(), vec.len()) };
+    // std::mem::forget(vec);  // Prevent Rust from freeing
+    //
+    // 3. Shared ownership (reference counting)
+    // extern "C" { fn c_incref(*mut u8); fn c_decref(*mut u8); }
+    // struct SharedPtr(*mut u8);
+    // impl Clone for SharedPtr { fn clone(&self) -> Self { unsafe { c_incref(self.0); } Self(self.0) } }
+    // impl Drop for SharedPtr { fn drop(&mut self) { unsafe { c_decref(self.0); } } }
+
+    println!("  Ownership patterns shown")
+
+    // ===== BINDGEN =====
+    println!("\n--- Bindgen ---")
+    println!("  Generate Nova bindings from C headers:")
+    println!("  ")
+    println!("  // build.rs")
+    println!("  bindgen::Builder::default()")
+    println!("      .header(\"wrapper.h\")")
+    println!("      .generate()")
+    println!("      .write_to_file(\"bindings.nova\")")
+    println!("  ")
+    println!("  // Includes:")
+    println!("  // #include <stdio.h>")
+    println!("  // #include <stdlib.h>")
+    println!("  // #include \"mylib.h\"")
+
+    // ===== ERROR HANDLING =====
+    println!("\n--- Error Handling ---")
+
+    // C error codes
+    extern "C" {
+        fn fallible_operation(out_error: *mut i32) -> i32;
+    }
+
+    // Nova Result wrapper
+    fn safe_operation() -> Result<i32, i32> {
+        let mut error = 0
+        let result = unsafe { fallible_operation(&mut error) }
+        if error != 0 {
+            Err(error)
+        } else {
+            Ok(result)
+        }
+    }
+
+    // C++ exceptions (catch at boundary)
+    // extern "C" fn cpp_wrapper() -> i32 {
+    //     try { return cpp_might_throw(); }
+    //     catch (...) { return -1; }
+    // }
+
+    println!("  Error handling patterns shown")
+
+    // ===== THREAD SAFETY =====
+    println!("\n--- Thread Safety ---")
+
+    // C thread-local storage
+    extern "C" {
+        fn get_thread_local() -> *mut i32;
+        fn set_thread_local(value: *mut i32);
+    }
+
+    // Nova wrapper with Send/Sync
+    struct ThreadLocalWrapper {
+        // No direct access - use methods
+    }
+
+    impl ThreadLocalWrapper {
+        fn get(&self) -> i32 {
+            let ptr = unsafe { get_thread_local() }
+            if ptr.is_null() { 0 } else { unsafe { *ptr } }
+        }
+
+        fn set(&self, value: i32) {
+            let mut val = value
+            unsafe { set_thread_local(&mut val) }
+        }
+    }
+
+    // Only implement Send if C library guarantees thread safety
+    unsafe impl Send for ThreadLocalWrapper {}
+    unsafe impl Sync for ThreadLocalWrapper {}
+
+    println!("  Thread safety patterns shown")
+
+    // ===== PANIC SAFETY =====
+    println!("\n--- Panic Safety ---")
+
+    // Never let panics cross FFI boundary
+    extern "C" fn safe_callback(data: *mut u8) {
+        let result = std::panic::catch_unwind(|| {
+            // Actual work here
+            println!("  Callback executing")
+        });
+
+        if result.is_err() {
+            eprintln!("  Panic caught in FFI callback!")
+        }
+    }
+
+    // Use #[no_panic] attribute (requires no-panic crate)
+    // #[no_panic]
+    // extern "C" fn guaranteed_no_panic() { ... }
+
+    println!("  Panic safety shown")
+
+    // ===== TESTING FFI =====
+    println!("\n--- Testing FFI ---")
+    println!("  1. Mock C functions in tests")
+    println!("  2. Use dynamic libraries for integration tests")
+    println!("  3. Test memory safety with Miri")
+    println!("  4. Fuzz test FFI boundaries")
+
+    println!("\n✅ Advanced FFI example completed!")
+}

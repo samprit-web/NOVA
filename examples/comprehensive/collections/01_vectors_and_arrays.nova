@@ -1,0 +1,174 @@
+// Example 1: Vectors and Arrays
+// Demonstrates: Vec, arrays, slices, common operations, iteration
+
+fn main() {
+    println!("=== Vectors & Arrays ===\n")
+
+    // ===== VECTOR CREATION =====
+    // Empty vector with type annotation
+    let mut v1: Vec<i32> = Vec::new()
+    v1.push(1)
+    v1.push(2)
+    v1.push(3)
+
+    // Using vec! macro
+    let v2 = vec![1, 2, 3, 4, 5]
+    let v3 = vec![0; 10]  // 10 zeros
+
+    println!("v1: {:?}", v1)
+    println!("v2: {:?}", v2)
+    println!("v3 (10 zeros): {:?}", v3)
+
+    // ===== ARRAY CREATION =====
+    let arr1: [i32; 5] = [1, 2, 3, 4, 5]
+    let arr2 = [10, 20, 30, 40, 50]  // type inferred
+    let arr3 = [0; 100]  // 100 zeros
+
+    println!("\narr1: {:?}", arr1)
+    println!("arr2: {:?}", arr2)
+    println!("arr3 len: {}", arr3.len())
+
+    // ===== ACCESSING ELEMENTS =====
+    let v = vec![10, 20, 30, 40, 50]
+
+    // Direct indexing (panics on out of bounds)
+    println!("\nv[0] = {}", v[0])
+    println!("v[2] = {}", v[2])
+
+    // Safe access with get()
+    println!("v.get(0) = {:?}", v.get(0))
+    println!("v.get(100) = {:?}", v.get(100))
+
+    // First and last
+    println!("v.first() = {:?}", v.first())
+    println!("v.last() = {:?}", v.last())
+
+    // ===== MODIFYING VECTORS =====
+    let mut numbers = vec![1, 2, 3]
+    numbers.push(4)
+    numbers.push(5)
+    println!("\nAfter push: {:?}", numbers)
+
+    // Insert at position
+    numbers.insert(2, 99)
+    println!("After insert(2, 99): {:?}", numbers)
+
+    // Pop last
+    let last = numbers.pop()
+    println!("Popped: {:?}, remaining: {:?}", last, numbers)
+
+    // Remove at index
+    let removed = numbers.remove(1)
+    println!("Removed at 1: {}, remaining: {:?}", removed, numbers)
+
+    // ===== ITERATION =====
+    println!("\n--- Iteration ---")
+    let vec = vec!['a', 'b', 'c']
+
+    // Immutable iteration
+    for item in &vec {
+        print!("{} ", item)
+    }
+    println!()
+
+    // Mutable iteration
+    let mut vec2 = vec![1, 2, 3]
+    for item in &mut vec2 {
+        *item *= 10
+    }
+    println!("Mutated: {:?}", vec2)
+
+    // Consuming iteration
+    let vec3 = vec![1, 2, 3]
+    for item in vec3 {
+        print!("{} ", item)
+    }
+    println!()
+
+    // Enumerate
+    for (i, item) in vec.iter().enumerate() {
+        println!("  [{}] = {}", i, item)
+    }
+
+    // ===== SLICES =====
+    println!("\n--- Slices ---")
+    let slice = &v[1..4]  // elements 1, 2, 3
+    println!("v[1..4] = {:?}", slice)
+
+    let full_slice = &v[..]
+    println!("Full slice: {:?}", full_slice)
+
+    // ===== COMMON METHODS =====
+    let mut nums = vec![3, 1, 4, 1, 5, 9, 2, 6]
+
+    println!("\n--- Common Methods ---")
+    println!("len: {}", nums.len())
+    println!("is_empty: {}", nums.is_empty())
+    println!("capacity: {}", nums.capacity())
+
+    nums.sort()
+    println!("Sorted: {:?}", nums)
+
+    nums.reverse()
+    println!("Reversed: {:?}", nums)
+
+    let contains_5 = nums.contains(&5)
+    println!("Contains 5: {}", contains_5)
+
+    let index = nums.iter().position(|&x| x == 5)
+    println!("Index of 5: {:?}", index)
+
+    // Deduplicate
+    nums.dedup()
+    println!("Deduped: {:?}", nums)
+
+    // ===== VECTOR OPERATIONS =====
+    println!("\n--- Vector Operations ---")
+
+    // Map
+    let doubled: Vec<i32> = nums.iter().map(|x| x * 2).collect()
+    println!("Doubled: {:?}", doubled)
+
+    // Filter
+    let evens: Vec<i32> = nums.iter().filter(|x| *x % 2 == 0).copied().collect()
+    println!("Evens: {:?}", evens)
+
+    // Fold/Reduce
+    let sum: i32 = nums.iter().sum()
+    let product: i32 = nums.iter().product()
+    println!("Sum: {}, Product: {}", sum, product)
+
+    // Partition
+    let (evens, odds): (Vec<i32>, Vec<i32>) = nums.iter().copied().partition(|x| x % 2 == 0)
+    println!("Evens: {:?}, Odds: {:?}", evens, odds)
+
+    // ===== ARRAY SPECIFIC =====
+    println!("\n--- Array Operations ---")
+    let arr = [1, 2, 3, 4, 5]
+    let slice_from_arr = &arr[1..3]
+    println!("Array slice: {:?}", slice_from_arr)
+
+    // Iterate array
+    for item in arr {
+        print!("{} ", item)
+    }
+    println!()
+
+    // Array to vector
+    let vec_from_arr = arr.to_vec()
+    println!("Array to vec: {:?}", vec_from_arr)
+
+    // ===== 2D VECTORS =====
+    println!("\n--- 2D Vectors ---")
+    let mut matrix = vec![vec![0; 3]; 3]
+    matrix[0][0] = 1
+    matrix[1][1] = 2
+    matrix[2][2] = 3
+    println!("Matrix: {:?}", matrix)
+
+    // Flatten
+    let flat: Vec<i32> = matrix.iter().flatten().copied().collect()
+    println!("Flattened: {:?}", flat)
+
+    println!("\n✅ Vectors & Arrays example completed!")
+}

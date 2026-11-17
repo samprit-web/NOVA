@@ -1,0 +1,239 @@
+// Example 2: Advanced Modules
+// Demonstrates: module paths, crate root, workspace, conditional compilation, module system
+
+fn main() {
+    println!("=== Advanced Modules ===\n")
+
+    // ===== ABSOLUTE AND RELATIVE PATHS =====
+    println!("--- Paths ---")
+
+    mod a {
+        pub mod b {
+            pub fn func() { println!("  a::b::func()") }
+            pub mod c {
+                pub fn deep() { println!("  a::b::c::deep()") }
+            }
+        }
+
+        pub fn outer() { println!("  a::outer()") }
+    }
+
+    // Absolute path (from crate root)
+    crate::a::b::func()
+    crate::a::b::c::deep()
+
+    // Relative path
+    a::b::func()
+    a::b::c::deep()
+
+    // Self and super
+    mod inner {
+        pub fn inner_func() { println!("  inner::inner_func()") }
+
+        mod nested {
+            pub fn call_sibling() {
+                super::inner_func()  // Call sibling
+            }
+
+            pub fn call_self() {
+                self::nested_helper()  // Call in self
+            }
+
+            fn nested_helper() { println!("  nested::nested_helper()") }
+        }
+    }
+
+    inner::nested::call_sibling()
+    inner::nested::call_self()
+
+    // ===== USE WITH GLOB AND NESTING =====
+    println!("\n--- Advanced Use ---")
+
+    mod utils {
+        pub mod strings {
+            pub fn trim(s: &str) -> &str { s.trim() }
+            pub fn upper(s: &str) -> String { s.to_uppercase() }
+        }
+
+        pub mod numbers {
+            pub fn square(x: i32) -> i32 { x * x }
+            pub fn cube(x: i32) -> i32 { x * x * x }
+        }
+    }
+
+    // Nested groups
+    use utils::{strings::{trim, upper}, numbers::{square, cube}};
+
+    println!("  trim: '{}'", trim("  hello  "))
+    println!("  upper: {}", upper("hello"))
+    println!("  square: {}", square(5))
+    println!("  cube: {}", cube(3))
+
+    // ===== CONDITIONAL COMPILATION =====
+    println!("\n--- Conditional Compilation ---")
+
+    #[cfg(feature = "logging")]
+    mod logging {
+        pub fn log(msg: &str) { println!("  LOG: {}", msg) }
+    }
+
+    #[cfg(not(feature = "logging"))]
+    mod logging {
+        pub fn log(_msg: &str) {}
+    }
+
+    logging::log("This may or may not print")
+
+    #[cfg(target_os = "linux")]
+    fn platform_specific() { println!("  Running on Linux") }
+
+    #[cfg(target_os = "windows")]
+    fn platform_specific() { println!("  Running on Windows") }
+
+    #[cfg(target_os = "macos")]
+    fn platform_specific() { println!("  Running on macOS") }
+
+    platform_specific()
+
+    #[cfg(debug_assertions)]
+    fn debug_only() { println!("  Debug build") }
+
+    #[cfg(not(debug_assertions))]
+    fn debug_only() { println!("  Release build") }
+
+    debug_only()
+
+    // ===== MODULE SYSTEM INTERNALS =====
+    println!("\n--- Module System Internals ---")
+
+    // Each module has:
+    // - Items (functions, structs, traits, etc.)
+    // - Submodules
+    // - Visibility rules
+    // - Use declarations
+
+    // Path resolution:
+    // 1. Start from current module
+    // 2. Look in current module's items
+    // 3. Look in parent modules (for absolute paths)
+    // 4. Check extern crates
+
+    // ===== WORKSPACE MODULES =====
+    println!("\n--- Workspace Modules ---")
+    println!("  Project structure:")
+    println!("  nova.toml          # workspace root")
+    println!("  /core")
+    println!("    nova.toml        # core library")
+    println!("    src/lib.nova")
+    println!("  /cli")
+    println!("    nova.toml        # cli binary")
+    println!("    src/main.nova")
+    println!("  ")
+    println!("  In core/src/lib.nova:")
+    println!("  pub mod types;")
+    println!("  pub mod utils;")
+    println!("  ")
+    println!("  In cli/src/main.nova:")
+    println!("  use core::{types, utils};")
+
+    // ===== MACRO MODULES =====
+    println!("\n--- Macro Modules ---")
+
+    #[macro_export]
+    macro_rules! vec_of {
+        ($($x:expr),*) => {
+            vec![$($x),*]
+        };
+    }
+
+    // In another module:
+    // #[macro_use]
+    // extern crate my_crate;
+    // or
+    // use my_crate::vec_of;
+
+    // ===== RE-EXPORT PATTERNS =====
+    println!("\n--- Re-export Patterns ---")
+
+    // Facade pattern: public API from internal modules
+    mod internal {
+        pub mod v1 {
+            pub fn api() -> &'static str { "v1" }
+        }
+
+        pub mod v2 {
+            pub fn api() -> &'static str { "v2" }
+        }
+    }
+
+    // Public API
+    pub mod api {
+        // Re-export current version
+        pub use internal::v2::api;
+    }
+
+    println!("  api::api() = {}", api::api())
+
+    // ===== MODULE ALIASES =====
+    println!("\n--- Module Aliases ---")
+
+    mod very_long_module_name {
+        pub fn func() { println!("  Original module") }
+    }
+
+    use very_long_module_name as short;
+
+    short::func()
+
+    // ===== PRIVATE MODULES IN PUBLIC API =====
+    println!("\n--- Private Modules in Public API ---")
+
+    mod public_api {
+        // Private implementation detail
+        mod impl_detail {
+            pub fn helper() -> i32 { 42 }
+        }
+
+        // Public wrapper
+        pub fn public_fn() -> i32 {
+            impl_detail::helper() * 2
+        }
+    }
+
+    println!("  public_api::public_fn() = {}", public_api::public_fn())
+
+    // ===== MODULE DOCUMENTATION =====
+    println!("\n--- Module Documentation ---")
+
+    /// This module provides mathematical operations.
+    /// 
+    /// # Examples
+    /// ```
+    /// let sum = math_doc::add(2, 3);
+    /// assert_eq!(sum, 5);
+    /// ```
+    mod math_doc {
+        /// Adds two numbers.
+        pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+        /// Multiplies two numbers.
+        pub fn mul(a: i32, b: i32) -> i32 { a * b }
+    }
+
+    println!("  math_doc::add(10, 5) = {}", math_doc::add(10, 5))
+
+    // ===== INLINE VS FILE MODULES =====
+    println!("\n--- Inline vs File Modules ---")
+
+    // Inline (in same file)
+    mod inline_mod {
+        pub fn func() { println!("  Inline module") }
+    }
+
+    // File-based (in separate file)
+    // mod file_mod;  // Looks for file_mod.nova or file_mod/mod.nova
+
+    inline_mod::func()
+
+    println!("\n✅ Advanced Modules example completed!")
+}

@@ -1,0 +1,289 @@
+// Example 1: Basic Pattern Matching
+// Demonstrates: match expressions, patterns, guards, destructuring
+
+fn main() {
+    println!("=== Basic Pattern Matching ===\n")
+
+    // ===== MATCH EXPRESSIONS =====
+    println!("--- Match Expressions ---")
+
+    let number = 42
+
+    match number {
+        0 => println!("  Zero"),
+        1 => println!("  One"),
+        2 => println!("  Two"),
+        _ => println!("  Other: {}", number),
+    }
+
+    // Match returns value
+    let result = match number {
+        0 => "zero",
+        1 => "one",
+        n if n > 0 => "positive",
+        _ => "negative",
+    }
+    println!("  Result: {}", result)
+
+    // ===== PATTERNS WITH ENUMS =====
+    println!("\n--- Enum Patterns ---")
+
+    enum Color {
+        Red,
+        Green,
+        Blue,
+        Rgb(u8, u8, u8),
+        Hsv { h: u16, s: u8, v: u8 },
+    }
+
+    let colors = [
+        Color::Red,
+        Color::Green,
+        Color::Rgb(255, 128, 0),
+        Color::Hsv { h: 180, s: 255, v: 128 },
+    ]
+
+    for color in colors {
+        let description = match color {
+            Color::Red => "Red",
+            Color::Green => "Green",
+            Color::Blue => "Blue",
+            Color::Rgb(r, g, b) => {
+                println!("  RGB({}, {}, {})", r, g, b)
+                continue
+            }
+            Color::Hsv { h, s, v } => {
+                println!("  HSV({}, {}, {})", h, s, v)
+                continue
+            }
+        };
+        println!("  {}", description)
+    }
+
+    // ===== DESTRUCTURING STRUCTS =====
+    println!("\n--- Struct Destructuring ---")
+
+    struct Point {
+        x: f64,
+        y: f64,
+    }
+
+    let point = Point { x: 3.0, y: 4.0 }
+
+    match point {
+        Point { x, y } => println!("  Point({}, {})", x, y),
+    }
+
+    // Partial destructuring
+    let Point { x, .. } = point
+    println!("  x = {}", x)
+
+    // Renaming
+    let Point { x: px, y: py } = point
+    println!("  px = {}, py = {}", px, py)
+
+    // ===== DESTRUCTURING TUPLES =====
+    println!("\n--- Tuple Destructuring ---")
+
+    let tuple = (1, "hello", 3.14)
+
+    match tuple {
+        (a, b, c) => println!("  ({}, {}, {})", a, b, c),
+    }
+
+    // Ignore with underscore
+    let (first, _, third) = tuple
+    println!("  first={}, third={}", first, third)
+
+    // Nested tuples
+    let nested = ((1, 2), (3, 4))
+    match nested {
+        ((a, b), (c, d)) => println!("  {}, {}, {}, {}", a, b, c, d),
+    }
+
+    // ===== SLICE PATTERNS =====
+    println!("\n--- Slice Patterns ---")
+
+    let slice = [1, 2, 3, 4, 5]
+
+    match slice {
+        [] => println!("  Empty"),
+        [first] => println!("  Single: {}", first),
+        [first, second] => println!("  Two: {}, {}", first, second),
+        [first, second, rest @ ..] => {
+            println!("  First: {}, Second: {}, Rest: {:?}", first, second, rest)
+        }
+    }
+
+    // ===== RANGE PATTERNS =====
+    println!("\n--- Range Patterns ---")
+
+    let score = 85
+
+    let grade = match score {
+        90..=100 => "A",
+        80..=89 => "B",
+        70..=79 => "C",
+        60..=69 => "D",
+        0..=59 => "F",
+        _ => "Invalid",
+    }
+    println!("  Score {} -> Grade {}", score, grade)
+
+    // ===== GUARDS =====
+    println!("\n--- Guards ---")
+
+    let pair = (5, 10)
+
+    match pair {
+        (x, y) if x == y => println!("  Equal"),
+        (x, y) if x > y => println!("  x > y"),
+        (x, y) if x < y => println!("  x < y"),
+        _ => unreachable!(),
+    }
+
+    // Multiple guards
+    let num = 15
+    match num {
+        n if n % 15 == 0 => println!("  FizzBuzz"),
+        n if n % 3 == 0 => println!("  Fizz"),
+        n if n % 5 == 0 => println!("  Buzz"),
+        n => println!("  {}", n),
+    }
+
+    // ===== BINDING MODES =====
+    println!("\n--- Binding Modes ---")
+
+    let opt = Some(String::from("hello"))
+
+    // Move (default)
+    match opt {
+        Some(s) => println!("  Moved: {}", s),
+        None => println!("  None"),
+    }
+
+    // opt is moved, can't use again
+
+    let opt2 = Some(String::from("world"))
+
+    // Ref binding
+    match &opt2 {
+        Some(ref s) => println!("  Ref: {}", s),
+        None => println!("  None"),
+    }
+
+    // opt2 still usable
+    println!("  opt2 still here: {:?}", opt2)
+
+    // Ref mut
+    let mut opt3 = Some(42)
+    match &mut opt3 {
+        Some(ref mut v) => *v *= 2,
+        None => {}
+    }
+    println!("  Ref mut: {:?}", opt3)
+
+    // ===== @ BINDING =====
+    println!("\n--- @ Binding ---")
+
+    let value = Some(42)
+
+    match value {
+        Some(val @ 1..=10) => println!("  Small: {}", val),
+        Some(val @ 11..=100) => println!("  Medium: {}", val),
+        Some(val) => println!("  Large: {}", val),
+        None => println!("  None"),
+    }
+
+    // ===== MATCH ON REFERENCES =====
+    println!("\n--- Match on References ---")
+
+    let value = &42
+
+    match value {
+        &val => println!("  Deref: {}", val),
+    }
+
+    // Or use ref pattern
+    let value = 42
+    match &value {
+        ref val => println!("  Ref: {}", val),
+    }
+
+    // ===== MULTIPLE PATTERNS =====
+    println!("\n--- Multiple Patterns ---")
+
+    let c = 'c'
+
+    match c {
+        'a' | 'e' | 'i' | 'o' | 'u' => println!("  Vowel"),
+        'a'..='z' => println!("  Consonant"),
+        _ => println!("  Other"),
+    }
+
+    // ===== NESTED PATTERNS =====
+    println!("\n--- Nested Patterns ---")
+
+    #[derive(Debug)]
+    enum Shape {
+        Circle(f64),
+        Rectangle(f64, f64),
+    }
+
+    #[derive(Debug)]
+    enum Drawing {
+        Single(Shape),
+        Group(Vec<Drawing>),
+    }
+
+    let drawing = Drawing::Group(vec![
+        Drawing::Single(Shape::Circle(5.0)),
+        Drawing::Single(Shape::Rectangle(10.0, 20.0)),
+    ])
+
+    fn describe(drawing: &Drawing) -> String {
+        match drawing {
+            Drawing::Single(Shape::Circle(r)) => format!("Circle(r={})", r),
+            Drawing::Single(Shape::Rectangle(w, h)) => format!("Rect(w={}, h={})", w, h),
+            Drawing::Group(items) => {
+                let descs: Vec<String> = items.iter().map(describe).collect()
+                format!("Group[{}]", descs.join(", "))
+            }
+        }
+    }
+
+    println!("  {}", describe(&drawing))
+
+    // ===== IF LET / WHILE LET =====
+    println!("\n--- If Let / While Let ---")
+
+    let opt = Some(42)
+
+    if let Some(x) = opt {
+        println!("  Got: {}", x)
+    }
+
+    let mut stack = vec![1, 2, 3]
+    while let Some(top) = stack.pop() {
+        println!("  Popped: {}", top)
+    }
+
+    // ===== MATCH ERGONOMICS =====
+    println!("\n--- Match Ergonomics ---")
+
+    // Auto-deref and auto-ref
+    let opt = &Some(42)
+
+    match opt {
+        Some(val) => println!("  Auto-ref: {}", val),  // val is &i32
+        None => {}
+    }
+
+    // With ref
+    match opt {
+        Some(ref val) => println!("  Explicit ref: {}", val),
+        None => {}
+    }
+
+    println!("\n✅ Basic Pattern Matching example completed!")
+}

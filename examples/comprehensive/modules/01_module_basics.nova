@@ -1,0 +1,162 @@
+// Example 1: Module Basics
+// Demonstrates: mod, use, pub, visibility, inline modules, module files
+
+fn main() {
+    println!("=== Module Basics ===\n")
+
+    // ===== INLINE MODULES =====
+    println!("--- Inline Modules ---")
+
+    mod math {
+        pub fn add(a: i32, b: i32) -> i32 {
+            a + b
+        }
+
+        pub fn multiply(a: i32, b: i32) -> i32 {
+            a * b
+        }
+
+        // Private function
+        fn internal_helper() -> i32 {
+            42
+        }
+
+        pub mod constants {
+            pub const PI: f64 = 3.14159265359
+            pub const E: f64 = 2.71828182846
+        }
+    }
+
+    println!("  math::add(2, 3) = {}", math::add(2, 3))
+    println!("  math::multiply(4, 5) = {}", math::multiply(4, 5))
+    println!("  math::constants::PI = {}", math::constants::PI)
+    println!("  math::constants::E = {}", math::constants::E)
+
+    // math::internal_helper()  // Error: private
+
+    // ===== USE DECLARATIONS =====
+    println!("\n--- Use Declarations ---")
+
+    use math::add
+    use math::multiply as mul
+    use math::constants::{PI, E}
+
+    println!("  add(10, 20) = {}", add(10, 20))
+    println!("  mul(3, 4) = {}", mul(3, 4))
+    println!("  PI = {}", PI)
+    println!("  E = {}", E)
+
+    // Glob import (use with caution)
+    // use math::*;
+
+    // ===== VISIBILITY =====
+    println!("\n--- Visibility ---")
+
+    mod outer {
+        pub mod inner {
+            pub fn public_fn() { println!("  public_fn") }
+            fn private_fn() { println!("  private_fn") }
+            pub(super) fn super_fn() { println!("  super_fn") }
+            pub(crate) fn crate_fn() { println!("  crate_fn") }
+        }
+
+        fn outer_private() { println!("  outer_private") }
+
+        pub fn call_inner() {
+            inner::public_fn()
+            inner::private_fn()  // accessible within parent
+            inner::super_fn()
+            inner::crate_fn()
+        }
+    }
+
+    outer::call_inner()
+    outer::inner::public_fn()
+    // outer::inner::private_fn()  // Error: private
+    outer::inner::super_fn()
+    outer::inner::crate_fn()
+
+    // ===== RE-EXPORTS =====
+    println!("\n--- Re-exports ---")
+
+    mod shapes {
+        pub mod circle {
+            pub fn area(r: f64) -> f64 { std::f64::consts::PI * r * r }
+        }
+
+        pub mod rectangle {
+            pub fn area(w: f64, h: f64) -> f64 { w * h }
+        }
+
+        // Re-export for convenience
+        pub use circle::area as circle_area
+        pub use rectangle::area as rect_area
+    }
+
+    println!("  shapes::circle_area(5.0) = {}", shapes::circle_area(5.0))
+    println!("  shapes::rect_area(3.0, 4.0) = {}", shapes::rect_area(3.0, 4.0))
+
+    // ===== MODULE FILES (CONCEPTUAL) =====
+    println!("\n--- Module Files ---")
+    println!("  In real projects, modules can be in separate files:")
+    println!("  // lib.nova")
+    println!("  mod math;        // loads math.nova or math/mod.nova")
+    println!("  mod shapes;")
+    println!("  ")
+    println!("  // math.nova")
+    println!("  pub fn add(a, b) { a + b }")
+    println!("  ")
+    println!("  // math/mod.nova")
+    println!("  pub mod arithmetic;")
+    println!("  pub mod geometry;")
+
+    // ===== NESTED USE =====
+    println!("\n--- Nested Use ---")
+
+    use std::collections::{HashMap, HashSet}
+    use std::fmt::{Debug, Display}
+
+    let mut map = HashMap::new()
+    map.insert("key", 42)
+    println!("  HashMap: {:?}", map)
+
+    let mut set = HashSet::new()
+    set.insert(1)
+    println!("  HashSet: {:?}", set)
+
+    // ===== USE WITH ALIAS =====
+    println!("\n--- Use with Alias ---")
+
+    use std::time::Duration as Dur
+    use std::collections::hash_map::Entry as MapEntry
+
+    let duration = Dur::from_millis(100)
+    println!("  Duration: {:?}", duration)
+
+    // ===== EXTERNAL CRATES =====
+    println!("\n--- External Crates ---")
+    println!("  In nova.toml:")
+    println!("  [dependencies]")
+    println!("  serde = \"1.0\"")
+    println!("  tokio = \"1.0\"")
+    println!("  ")
+    println!("  In code:")
+    println!("  use serde::{Serialize, Deserialize}")
+    println!("  use tokio::net::TcpListener")
+
+    // ===== PRELUDE =====
+    println!("\n--- Prelude ---")
+    println!("  Standard library prelude auto-imports:")
+    println!("  - Option, Result, Vec, String, Box")
+    println!("  - Iterator, Future, Clone, Copy")
+    println!("  - Debug, Display, PartialEq, Eq")
+    println!("  - Drop, Sized, Send, Sync")
+
+    // ===== MACRO USE =====
+    println!("\n--- Macro Use ---")
+    println!("  Macros are imported with #[macro_use] or use:")
+    println!("  #[macro_use] extern crate serde_json;")
+    println!("  use serde_json::json;")
+
+    println!("\n✅ Module Basics example completed!")
+}

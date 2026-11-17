@@ -1,0 +1,237 @@
+// Example 1: Declarative Macros
+// Demonstrates: macro_rules!, pattern matching, repetition, hygiene, macro export
+
+fn main() {
+    println!("=== Declarative Macros ===\n")
+
+    // ===== BASIC MACRO =====
+    println!("--- Basic Macro ---")
+
+    macro_rules! say_hello {
+        () => {
+            println!("  Hello from macro!")
+        };
+    }
+
+    say_hello!()
+
+    // ===== MACRO WITH ARGUMENTS =====
+    println!("\n--- Macro with Arguments ---")
+
+    macro_rules! greet {
+        ($name:expr) => {
+            println!("  Hello, {}!", $name)
+        };
+    }
+
+    greet!("NOVA")
+    greet!("World")
+
+    // Multiple arguments
+    macro_rules! add {
+        ($a:expr, $b:expr) => {
+            $a + $b
+        };
+    }
+
+    println!("  add!(2, 3) = {}", add!(2, 3))
+    println!("  add!(10, 20) = {}", add!(10, 20))
+
+    // ===== REPETITION =====
+    println!("\n--- Repetition ---")
+
+    macro_rules! vec_of {
+        ($($x:expr),*) => {
+            vec![$($x),*]
+        };
+    }
+
+    let v = vec_of![1, 2, 3, 4, 5]
+    println!("  vec_of![1,2,3,4,5] = {:?}", v)
+
+    macro_rules! sum {
+        ($($x:expr),+) => {
+            0 $(+ $x)*
+        };
+    }
+
+    println!("  sum!(1,2,3,4,5) = {}", sum!(1,2,3,4,5))
+    println!("  sum!(10) = {}", sum!(10))
+
+    // Zero or more
+    macro_rules! print_all {
+        ($($x:expr),*) => {
+            $(println!("  Item: {}", $x);)*
+        };
+    }
+
+    print_all!(1, 2, 3)
+    print_all!()  // Nothing printed
+
+    // ===== PATTERN MATCHING IN MACROS =====
+    println!("\n--- Pattern Matching ---")
+
+    macro_rules! describe {
+        (0) => { println!("  Zero") };
+        (1) => { println!("  One") };
+        ($n:expr) => { println!("  Number: {}", $n) };
+    }
+
+    describe!(0)
+    describe!(1)
+    describe!(42)
+
+    // Multiple patterns
+    macro_rules! match_expr {
+        ($e:expr) => {
+            match $e {
+                0 => "zero",
+                1 => "one",
+                n if n > 0 => "positive",
+                _ => "negative",
+            }
+        };
+    }
+
+    println!("  match_expr!(0) = {}", match_expr!(0))
+    println!("  match_expr!(5) = {}", match_expr!(5))
+    println!("  match_expr!(-3) = {}", match_expr!(-3))
+
+    // ===== IDENTIFIERS AND TYPES =====
+    println!("\n--- Identifiers and Types ---")
+
+    macro_rules! create_fn {
+        ($name:ident) => {
+            fn $name() -> i32 { 42 }
+        };
+    }
+
+    create_fn!(my_function)
+    println!("  my_function() = {}", my_function())
+
+    macro_rules! create_struct {
+        ($name:ident { $($field:ident: $ty:ty),* }) => {
+            struct $name {
+                $($field: $ty),*
+            }
+        };
+    }
+
+    create_struct!(Point { x: i32, y: i32 })
+    let p = Point { x: 1, y: 2 }
+    println!("  Point: ({}, {})", p.x, p.y)
+
+    // ===== TT MUNCHER (Recursive Macros) =====
+    println!("\n--- TT Muncher (Recursive) ---")
+
+    macro_rules! count_args {
+        () => { 0 };
+        ($head:tt $($tail:tt)*) => { 1 + count_args!($($tail)*) };
+    }
+
+    println!("  count_args!() = {}", count_args!())
+    println!("  count_args!(a) = {}", count_args!(a))
+    println!("  count_args!(a b c) = {}", count_args!(a b c))
+    println!("  count_args!(1 2 3 4 5) = {}", count_args!(1 2 3 4 5))
+
+    // ===== MACRO HYGIENE =====
+    println!("\n--- Macro Hygiene ---")
+
+    macro_rules! hygiene_demo {
+        () => {
+            let x = 100;
+            println!("  Macro x = {}", x);
+        };
+    }
+
+    let x = 10;
+    hygiene_demo!()
+    println!("  Outer x = {}", x)  // Not affected by macro's x
+
+    // ===== MACRO EXPORT =====
+    println!("\n--- Macro Export ---")
+    println!("  In lib.nova:")
+    println!("  #[macro_export]")
+    println!("  macro_rules! my_macro {{ ... }}")
+    println!("  ")
+    println!("  In consumer:")
+    println!("  use my_crate::my_macro;")
+
+    // ===== COMPLEX EXAMPLE: HTML BUILDER =====
+    println!("\n--- Complex Example: HTML Builder ---")
+
+    macro_rules! html {
+        ($tag:ident) => {
+            format!("<{0}></{0}>", stringify!($tag))
+        };
+        ($tag:ident $($attr:ident=$value:expr),* ) => {
+            format!("<{} {}/>", stringify!($tag), $(
+                format!("{}=\"{}\"", stringify!($attr), $value)
+            ),*)
+        };
+        ($tag:ident $($attr:ident=$value:expr),* > $($child:tt)*) => {
+            format!("<{} {}>{}</{}>",
+                stringify!($tag),
+                $(
+                    format!("{}=\"{}\"", stringify!($attr), $value)
+                ),*,
+                html!($($child)*),
+                stringify!($tag)
+            )
+        };
+        ($($child:tt)*) => {
+            $(
+                html!($child)
+            )*
+        };
+    }
+
+    // Note: This is simplified - real HTML macro would be more complex
+    println!("  Macro pattern demonstrated")
+
+    // ===== MACRO WITH BLOCKS =====
+    println!("\n--- Macro with Blocks ---")
+
+    macro_rules! with_logging {
+        ($name:expr, $block:block) => {
+            {
+                println!("  Entering: {}", $name);
+                let result = $block;
+                println!("  Exiting: {}", $name);
+                result
+            }
+        };
+    }
+
+    let result = with_logging!("computation", {
+        let a = 10;
+        let b = 20;
+        a + b
+    });
+    println!("  Result: {}", result)
+
+    // ===== MACRO FOR CODE GENERATION =====
+    println!("\n--- Code Generation ---")
+
+    macro_rules! impl_display_for {
+        ($type:ident) => {
+            impl std::fmt::Display for $type {
+                fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(f, "{}", stringify!($type))
+                }
+            }
+        };
+    }
+
+    struct MyType;
+    impl_display_for!(MyType)
+
+    println!("  Display: {}", MyType)
+
+    // ===== MACRO DEBUGGING =====
+    println!("\n--- Macro Debugging ---")
+    println!("  Use 'cargo expand' to see macro expansion")
+    println!("  Use 'macro_rules! trace_macros {{ ... }}' for tracing")
+
+    println!("\n✅ Declarative Macros example completed!")
+}

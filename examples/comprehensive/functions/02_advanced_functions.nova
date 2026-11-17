@@ -1,0 +1,225 @@
+// Example 2: Advanced Function Features
+// Demonstrates: closures, higher-order functions, function pointers, recursion, macros
+
+fn main() {
+    println!("=== Advanced Functions ===\n")
+
+    // ===== CLOSURES =====
+    println!("1. Basic closures:")
+
+    // Simple closure (type inferred)
+    let add_one = |x: i32| x + 1
+    println!("  add_one(5) = {}", add_one(5))
+
+    // Closure with explicit types
+    let multiply: fn(i32, i32) -> i32 = |a, b| a * b
+    println!("  multiply(3, 4) = {}", multiply(3, 4))
+
+    // Closure capturing environment
+    let factor = 10
+    let scale = |x: i32| x * factor
+    println!("  scale(3) with factor {} = {}", factor, scale(3))
+
+    // Mutable capture
+    let mut count = 0
+    let mut increment = || {
+        count += 1
+        count
+    }
+    println!("  increment() = {}", increment())
+    println!("  increment() = {}", increment())
+
+    // Move closure (takes ownership)
+    let data = vec![1, 2, 3]
+    let consume = move || {
+        println!("  Consumed data: {:?}", data)
+    }
+    consume()
+
+    // ===== CLOSURE TRAITS =====
+    println!("\n2. Closure traits (Fn, FnMut, FnOnce):")
+
+    // Fn - can be called multiple times, immutably borrows
+    let fn_closure = |x: i32| x + 1
+    println!("  Fn: {}", fn_closure(10))
+
+    // FnMut - can be called multiple times, mutably borrows
+    let mut counter = 0
+    let mut fnmut_closure = || {
+        counter += 1
+        counter
+    }
+    println!("  FnMut: {}", fnmut_closure())
+    println!("  FnMut: {}", fnmut_closure())
+
+    // FnOnce - can be called once, takes ownership
+    let owned = String::from("owned")
+    let fnonce_closure = move || {
+        println!("  FnOnce consumed: {}", owned)
+    }
+    fnonce_closure()
+
+    // ===== HIGHER-ORDER FUNCTIONS =====
+    println!("\n3. Higher-order functions:")
+
+    fn apply<F>(f: F, x: i32) -> i32
+    where F: Fn(i32) -> i32 {
+        f(x)
+    }
+
+    let result = apply(|x| x * 2, 5)
+    println!("  apply(|x| x*2, 5) = {}", result)
+
+    // Function returning closure
+    fn make_adder(n: i32) -> impl Fn(i32) -> i32 {
+        move |x| x + n
+    }
+    let add_five = make_adder(5)
+    println!("  make_adder(5)(10) = {}", add_five(10))
+
+    // ===== ITERATOR CLOSURES =====
+    println!("\n4. Iterator closures:")
+
+    let numbers = vec![1, 2, 3, 4, 5]
+
+    let doubled: Vec<i32> = numbers.iter().map(|x| x * 2).collect()
+    println!("  map: {:?}", doubled)
+
+    let evens: Vec<i32> = numbers.iter().filter(|x| *x % 2 == 0).copied().collect()
+    println!("  filter: {:?}", evens)
+
+    let sum: i32 = numbers.iter().fold(0, |acc, x| acc + x)
+    println!("  fold: {}", sum)
+
+    let product: i32 = numbers.iter().product()
+    println!("  product: {}", product)
+
+    // ===== RECURSIVE FUNCTIONS =====
+    println!("\n5. Recursive functions:")
+
+    fn factorial(n: u64) -> u64 {
+        if n <= 1 { 1 } else { n * factorial(n - 1) }
+    }
+    println!("  factorial(5) = {}", factorial(5))
+    println!("  factorial(10) = {}", factorial(10))
+
+    // Tail recursion (optimized)
+    fn factorial_tail(n: u64, acc: u64) -> u64 {
+        if n <= 1 { acc } else { factorial_tail(n - 1, acc * n) }
+    }
+    println!("  factorial_tail(5, 1) = {}", factorial_tail(5, 1))
+
+    // Fibonacci
+    fn fibonacci(n: u32) -> u64 {
+        match n {
+            0 => 0,
+            1 => 1,
+            _ => fibonacci(n - 1) + fibonacci(n - 2),
+        }
+    }
+    println!("  fibonacci(10) = {}", fibonacci(10))
+
+    // ===== FUNCTION POINTERS =====
+    println!("\n6. Function pointers:")
+
+    fn add(a: i32, b: i32) -> i32 { a + b }
+    fn subtract(a: i32, b: i32) -> i32 { a - b }
+
+    fn calculate(f: fn(i32, i32) -> i32, a: i32, b: i32) -> i32 {
+        f(a, b)
+    }
+
+    println!("  calculate(add, 10, 5) = {}", calculate(add, 10, 5))
+    println!("  calculate(subtract, 10, 5) = {}", calculate(subtract, 10, 5))
+
+    // Array of function pointers
+    let operations: [fn(i32, i32) -> i32; 2] = [add, subtract]
+    for op in operations {
+        println!("  op(20, 8) = {}", op(20, 8))
+    }
+
+    // ===== DIVERGING FUNCTIONS (!) =====
+    println!("\n7. Diverging functions (never return):")
+
+    fn panic_function() -> ! {
+        panic!("This never returns!")
+    }
+
+    fn exit_program(code: i32) -> ! {
+        std::process::exit(code)
+    }
+
+    // This would not compile - unreachable code after diverging call
+    // let x = panic_function();  // error: unreachable
+
+    println!("  Diverging functions defined (not called)")
+
+    // ===== GENERIC FUNCTIONS WITH CONSTRAINTS =====
+    println!("\n8. Generic functions with constraints:")
+
+    fn max<T: PartialOrd>(a: T, b: T) -> T {
+        if a > b { a } else { b }
+    }
+
+    println!("  max(10, 20) = {}", max(10, 20))
+    println!("  max(3.14, 2.71) = {}", max(3.14, 2.71))
+    println!("  max('a', 'z') = {}", max('a', 'z'))
+
+    // Multiple constraints
+    fn print_and_compare<T: PartialOrd + std::fmt::Display>(a: T, b: T) {
+        println!("  Comparing: {} vs {}", a, b)
+        if a > b {
+            println!("  {} is greater", a)
+        } else {
+            println!("  {} is greater or equal", b)
+        }
+    }
+    print_and_compare(100, 50)
+    print_and_compare("hello", "world")
+
+    // ===== CONST GENERICS =====
+    println!("\n9. Const generics:")
+
+    fn get_first<const N: usize>(arr: [i32; N]) -> i32 {
+        arr[0]
+    }
+
+    let arr1 = [1, 2, 3]
+    let arr2 = [10, 20]
+    println!("  get_first([1,2,3]) = {}", get_first(arr1))
+    println!("  get_first([10,20]) = {}", get_first(arr2))
+
+    // ===== ASYNC FUNCTIONS =====
+    println!("\n10. Async functions:")
+
+    async fn fetch_user(id: u32) -> String {
+        format!("User-{}", id)
+    }
+
+    async fn fetch_multiple() {
+        let user1 = fetch_user(1).await
+        let user2 = fetch_user(2).await
+        println!("  Fetched: {} and {}", user1, user2)
+    }
+
+    // Run async
+    std::task::block_on(fetch_multiple())
+
+    // ===== RECURSIVE CLOSURES (using Box) =====
+    println!("\n11. Recursive closures:")
+
+    let fib = {
+        let mut fib = |n: u32| -> u64 { 0 };  // placeholder
+        fib = move |n: u32| -> u64 {
+            match n {
+                0 => 0,
+                1 => 1,
+                _ => fib(n - 1) + fib(n - 2),
+            }
+        };
+        fib
+    };
+    println!("  Recursive closure fib(8) = {}", fib(8))
+
+    println!("\n✅ Advanced Functions example completed!")
+}

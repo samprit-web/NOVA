@@ -1,0 +1,325 @@
+// Example 2: Generics, Traits, and Advanced Types
+// Demonstrates: generic types, trait definitions, trait bounds, associated types, lifetimes
+
+fn main() {
+    println!("=== Generics, Traits, Advanced Types ===\n")
+
+    // ===== GENERIC STRUCTS =====
+    struct Pair<T, U> {
+        first: T,
+        second: U,
+    }
+
+    impl<T, U> Pair<T, U> {
+        fn new(first: T, second: U) -> Self {
+            Pair { first, second }
+        }
+
+        fn swap(self) -> Pair<U, T> {
+            Pair { first: self.second, second: self.first }
+        }
+    }
+
+    let pair = Pair::new(42, "hello")
+    println!("Pair: ({}, {})", pair.first, pair.second)
+    let swapped = pair.swap()
+    println!("Swapped: ({}, {})", swapped.first, swapped.second)
+
+    // ===== GENERIC ENUMS =====
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+
+    impl<T, E> Result<T, E> {
+        fn is_ok(&self) -> bool {
+            matches!(self, Result::Ok(_))
+        }
+
+        fn unwrap(self) -> T {
+            match self {
+                Result::Ok(v) => v,
+                Result::Err(_) => panic!("Called unwrap on Err"),
+            }
+        }
+    }
+
+    let ok: Result<i32, &str> = Result::Ok(42)
+    let err: Result<i32, &str> = Result::Err("error")
+
+    println!("ok.is_ok() = {}", ok.is_ok())
+    println!("err.is_ok() = {}", err.is_ok())
+
+    // ===== TRAIT DEFINITIONS =====
+    trait Drawable {
+        fn draw(&self) -> String;
+        fn bounding_box(&self) -> (f64, f64, f64, f64);
+    }
+
+    trait Printable {
+        fn print(&self) {
+            println!("Printing: {}", self.to_string())
+        }
+    }
+
+    // Trait with associated type
+    trait Iterator {
+        type Item;
+        fn next(&mut self) -> Option<Self::Item>;
+    }
+
+    // Trait with default implementation
+    trait Comparable {
+        fn compare(&self, other: &Self) -> std::cmp::Ordering;
+
+        fn max(self, other: Self) -> Self
+        where Self: Sized {
+            match self.compare(&other) {
+                std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => self,
+                std::cmp::Ordering::Less => other,
+            }
+        }
+    }
+
+    // ===== IMPLEMENTING TRAITS =====
+    struct Circle { radius: f64 }
+    struct Rectangle { width: f64, height: f64 }
+
+    impl Drawable for Circle {
+        fn draw(&self) -> String {
+            format!("Circle(r={})", self.radius)
+        }
+
+        fn bounding_box(&self) -> (f64, f64, f64, f64) {
+            let r = self.radius
+            (-r, -r, r, r)
+        }
+    }
+
+    impl Drawable for Rectangle {
+        fn draw(&self) -> String {
+            format!("Rect(w={}, h={})", self.width, self.height)
+        }
+
+        fn bounding_box(&self) -> (f64, f64, f64, f64) {
+            (0.0, 0.0, self.width, self.height)
+        }
+    }
+
+    let circle = Circle { radius: 5.0 }
+    let rect = Rectangle { width: 10.0, height: 20.0 }
+
+    println!("Circle: {}", circle.draw())
+    println!("Rect: {}", rect.draw())
+
+    // ===== TRAIT BOUNDS IN FUNCTIONS =====
+    fn draw_all<T: Drawable>(shapes: &[T]) {
+        for shape in shapes {
+            println!("  Drawing: {}", shape.draw())
+        }
+    }
+
+    let shapes: Vec<Box<dyn Drawable>> = vec![
+        Box::new(Circle { radius: 1.0 }),
+        Box::new(Rectangle { width: 2.0, height: 3.0 }),
+    ]
+    draw_all(&shapes)
+
+    // Multiple trait bounds
+    fn print_and_draw<T: Drawable + std::fmt::Debug>(item: &T) {
+        println!("Debug: {:?}", item)
+        println!("Draw: {}", item.draw())
+    }
+
+    print_and_draw(&Circle { radius: 5.0 })
+
+    // Where clause
+    fn process<T>(item: T)
+    where T: Drawable + Clone + Send + Sync + 'static {
+        println!("Processing: {}", item.draw())
+    }
+
+    process(Circle { radius: 10.0 })
+
+    // ===== OPERATOR TRAITS =====
+    use std::ops::{Add, Sub, Mul, Div, Neg, Index, IndexMut}
+
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    struct Vector2D {
+        x: f64,
+        y: f64,
+    }
+
+    impl Add for Vector2D {
+        type Output = Self;
+        fn add(self, other: Self) -> Self {
+            Vector2D { x: self.x + other.x, y: self.y + other.y }
+        }
+    }
+
+    impl Sub for Vector2D {
+        type Output = Self;
+        fn sub(self, other: Self) -> Self {
+            Vector2D { x: self.x - other.x, y: self.y - other.y }
+        }
+    }
+
+    impl Mul<f64> for Vector2D {
+        type Output = Self;
+        fn mul(self, scalar: f64) -> Self {
+            Vector2D { x: self.x * scalar, y: self.y * scalar }
+        }
+    }
+
+    impl Neg for Vector2D {
+        type Output = Self;
+        fn neg(self) -> Self {
+            Vector2D { x: -self.x, y: -self.y }
+        }
+    }
+
+    impl Index<usize> for Vector2D {
+        type Output = f64;
+        fn index(&self, index: usize) -> &f64 {
+            match index {
+                0 => &self.x,
+                1 => &self.y,
+                _ => panic!("Index out of bounds"),
+            }
+        }
+    }
+
+    impl IndexMut<usize> for Vector2D {
+        fn index_mut(&mut self, index: usize) -> &mut f64 {
+            match index {
+                0 => &mut self.x,
+                1 => &mut self.y,
+                _ => panic!("Index out of bounds"),
+            }
+        }
+    }
+
+    let v1 = Vector2D { x: 1.0, y: 2.0 }
+    let v2 = Vector2D { x: 3.0, y: 4.0 }
+
+    println!("v1 + v2 = {:?}", v1 + v2)
+    println!("v1 - v2 = {:?}", v1 - v2)
+    println!("v1 * 2.0 = {:?}", v1 * 2.0)
+    println!("-v1 = {:?}", -v1)
+    println!("v1[0] = {}, v1[1] = {}", v1[0], v1[1])
+
+    // ===== TRAIT OBJECTS (DYN) =====
+    fn draw_shape(shape: &dyn Drawable) {
+        println!("Trait object: {}", shape.draw())
+    }
+
+    draw_shape(&Circle { radius: 7.0 })
+    draw_shape(&Rectangle { width: 1.0, height: 1.0 })
+
+    // ===== ASSOCIATED TYPES =====
+    trait Container {
+        type Item;
+        fn get(&self) -> &Self::Item;
+        fn set(&mut self, item: Self::Item);
+    }
+
+    struct BoxContainer<T> {
+        value: T,
+    }
+
+    impl<T> Container for BoxContainer<T> {
+        type Item = T;
+        fn get(&self) -> &T { &self.value }
+        fn set(&mut self, item: T) { self.value = item }
+    }
+
+    let mut boxed = BoxContainer { value: 42 }
+    println!("Boxed value: {}", boxed.get())
+    boxed.set(100)
+    println!("Boxed new value: {}", boxed.get())
+
+    // ===== GENERIC TRAIT IMPLEMENTATIONS =====
+    trait FromStr {
+        type Err;
+        fn from_str(s: &str) -> Result<Self, Self::Err> where Self: Sized;
+    }
+
+    // ===== LIFETIMES =====
+    fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+        if x.len() > y.len() { x } else { y }
+    }
+
+    let s1 = String::from("hello")
+    let s2 = String::from("world")
+    let result = longest(&s1, &s2)
+    println!("Longest: {}", result)
+
+    // Struct with lifetime
+    struct Borrowed<'a> {
+        data: &'a str,
+    }
+
+    impl<'a> Borrowed<'a> {
+        fn get_data(&self) -> &'a str { self.data }
+    }
+
+    let borrowed = Borrowed { data: "hello" }
+    println!("Borrowed: {}", borrowed.get_data())
+
+    // Lifetime elision (implicit)
+    fn first_word(s: &str) -> &str {
+        let bytes = s.as_bytes()
+        for (i, &item) in bytes.iter().enumerate() {
+            if item == b' ' { return &s[0..i] }
+        }
+        &s[..]
+    }
+
+    let sentence = "Hello world"
+    println!("First word: {}", first_word(sentence))
+
+    // ===== HIGHER-KINDED TYPES (SIMULATED) =====
+    trait Functor<F> {
+        fn fmap<A, B>(fa: F<A>, f: fn(A) -> B) -> F<B>;
+    }
+
+    // ===== CONST GENERICS WITH TRAITS =====
+    trait ArrayLike<T, const N: usize> {
+        fn get(&self, index: usize) -> Option<&T>;
+        fn len(&self) -> usize { N }
+    }
+
+    impl<T, const N: usize> ArrayLike<T, N> for [T; N] {
+        fn get(&self, index: usize) -> Option<&T> {
+            if index < N { Some(&self[index]) } else { None }
+        }
+    }
+
+    let arr = [1, 2, 3, 4, 5]
+    println!("Array len: {}", arr.len())
+    println!("Array[2]: {:?}", arr.get(2))
+
+    // ===== RECURSIVE TRAITS =====
+    trait TreeNode {
+        type Value;
+        fn value(&self) -> &Self::Value;
+        fn children(&self) -> &[Self];
+    }
+
+    // ===== MARKER TRAITS =====
+    // Send, Sync, Copy, Clone, Sized, Unpin
+
+    #[derive(Copy, Clone)]
+    struct Copyable {
+        value: i32,
+    }
+
+    let c = Copyable { value: 42 }
+    let c2 = c  // Copy
+    println!("Copied: {}", c2.value)
+
+    // ===== AUTO TRAITS =====
+    // Unpin, UnwindSafe, RefUnwindSafe, Send, Sync
+
+    println!("\n✅ Generics, Traits, Advanced Types example completed!")
+}

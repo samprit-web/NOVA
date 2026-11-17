@@ -1,0 +1,371 @@
+// Example 2: Advanced Generics
+// Demonstrates: higher-kinded types, GATs, variance, specialization, type-level programming
+
+fn main() {
+    println!("=== Advanced Generics ===\n")
+
+    // ===== GENERIC ASSOCIATED TYPES (GATS) =====
+    println!("--- Generic Associated Types ---")
+
+    trait Iterator {
+        type Item;
+        fn next(&mut self) -> Option<Self::Item>;
+    }
+
+    trait LendingIterator {
+        type Item<'a> where Self: 'a;
+        fn next<'a>(&'a mut self) -> Option<Self::Item<'a>>;
+    }
+
+    struct WindowIter<'a, T> {
+        slice: &'a [T],
+        index: usize,
+    }
+
+    impl<'a, T> LendingIterator for WindowIter<'a, T> {
+        type Item<'b> = &'b [T] where 'a: 'b;
+
+        fn next<'b>(&'b mut self) -> Option<&'b [T]> {
+            if self.index + 2 <= self.slice.len() {
+                let window = &self.slice[self.index..self.index + 2]
+                self.index += 1
+                Some(window)
+            } else {
+                None
+            }
+        }
+    }
+
+    let data = [1, 2, 3, 4, 5]
+    let mut iter = WindowIter { slice: &data, index: 0 }
+    while let Some(window) = iter.next() {
+        println!("  Window: {:?}", window)
+    }
+
+    // ===== HIGHER-KINDED TYPES (SIMULATED) =====
+    println!("\n--- Higher-Kinded Types (Simulated) ---")
+
+    trait Functor<F> {
+        fn fmap<A, B>(fa: F<A>, f: fn(A) -> B) -> F<B>;
+    }
+
+    trait Applicative<F>: Functor<F> {
+        fn pure<A>(a: A) -> F<A>;
+        fn apply<A, B>(ff: F<fn(A) -> B>, fa: F<A>) -> F<B>;
+    }
+
+    trait Monad<F>: Applicative<F> {
+        fn bind<A, B>(ma: F<A>, f: fn(A) -> F<B>) -> F<B>;
+    }
+
+    // Implement for Option
+    impl Functor<Option> for () {
+        fn fmap<A, B>(fa: Option<A>, f: fn(A) -> B) -> Option<B> {
+            fa.map(f)
+        }
+    }
+
+    impl Applicative<Option> for () {
+        fn pure<A>(a: A) -> Option<A> {
+            Some(a)
+        }
+        fn apply<A, B>(ff: Option<fn(A) -> B>, fa: Option<A>) -> Option<B> {
+            ff.zip(fa).map(|(f, a)| f(a))
+        }
+    }
+
+    impl Monad<Option> for () {
+        fn bind<A, B>(ma: Option<A>, f: fn(A) -> Option<B>) -> Option<B> {
+            ma.and_then(f)
+        }
+    }
+
+    // Usage
+    let opt = Some(42)
+    let doubled = <() as Functor<Option>>::fmap(opt, |x| x * 2)
+    println!("  HKT fmap: {:?}", doubled)
+
+    // ===== TYPE-LEVEL PROGRAMMING =====
+    println!("\n--- Type-Level Programming ---")
+
+    // Peano numbers at type level
+    struct Zero;
+    struct Succ<N>(PhantomData<N>);
+
+    trait Nat {
+        const VALUE: usize;
+    }
+
+    impl Nat for Zero {
+        const VALUE: usize = 0;
+    }
+
+    impl<N: Nat> Nat for Succ<N> {
+        const VALUE: usize = N::VALUE + 1;
+    }
+
+    type One = Succ<Zero>;
+    type Two = Succ<One>;
+    type Three = Succ<Two>;
+
+    fn print_nat<N: Nat>() {
+        println!("  Nat value: {}", N::VALUE)
+    }
+
+    print_nat::<Zero>()
+    print_nat::<One>()
+    print_nat::<Two>()
+    print_nat::<Three>()
+
+    // Type-level list
+    trait HList {
+        type Head;
+        type Tail: HList;
+    }
+
+    struct HNil;
+    impl HList for HNil {
+        type Head = ();
+        type Tail = HNil;
+    }
+
+    struct HCons<H, T>(H, T);
+    impl<H, T: HList> HList for HCons<H, T> {
+        type Head = H;
+        type Tail = T;
+    }
+
+    type MyList = HCons<i32, HCons<String, HCons<bool, HNil>>>;
+
+    // ===== VARIANCE =====
+    println!("\n--- Variance ---")
+
+    use std::marker::PhantomData
+
+    // Covariant (default for immutable references)
+    struct Covariant<T> {
+        value: T,
+    }
+
+    // Invariant (mutable references, cells)
+    struct Invariant<T> {
+        value: std::cell::Cell<T>,
+    }
+
+    // Contravariant (function arguments)
+    struct Contravariant<T> {
+        _marker: PhantomData<fn(T)>,
+    }
+
+    // Function to demonstrate variance
+    fn accept_covariant<'a>(c: Covariant<&'a str>) {}
+    fn accept_invariant<'a>(c: Invariant<&'a str>) {}
+    fn accept_contravariant<'a>(c: Contravariant<&'a str>) {}
+
+    let cov = Covariant { value: "hello" }
+    let inv = Invariant { value: std::cell::Cell::new("hello") }
+    let contra = Contravariant { _marker: PhantomData }
+
+    accept_covariant(cov)
+    // accept_invariant(inv)  // Would need exact lifetime
+    // accept_contravariant(contra)  // Contravariant
+
+    println!("  Variance examples shown")
+
+    // ===== SPECIALIZATION (SIMULATED) =====
+    println!("\n--- Specialization (Simulated) ---")
+
+    trait DefaultImpl<T> {
+        fn default_value() -> T;
+    }
+
+    // General implementation
+    impl<T> DefaultImpl<T> for () {
+        default fn default_value() -> T {
+            panic!("No default for this type")
+        }
+    }
+
+    // Specialized for i32
+    impl DefaultImpl<i32> for () {
+        fn default_value() -> i32 { 42 }
+    }
+
+    // Specialized for String
+    impl DefaultImpl<String> for () {
+        fn default_value() -> String { "default".to_string() }
+    }
+
+    println!("  i32 default: {}", <() as DefaultImpl<i32>>::default_value())
+    println!("  String default: {}", <() as DefaultImpl<String>>::default_value())
+
+    // ===== TYPE STATE PATTERN =====
+    println!("\n--- Type State Pattern ---")
+
+    struct Closed;
+    struct Open;
+    struct Writing;
+
+    struct File<State> {
+        name: String,
+        _state: PhantomData<State>,
+    }
+
+    impl File<Closed> {
+        fn new(name: String) -> Self {
+            File { name, _state: PhantomData }
+        }
+
+        fn open(self) -> File<Open> {
+            println!("  Opening file: {}", self.name)
+            File { name: self.name, _state: PhantomData }
+        }
+    }
+
+    impl File<Open> {
+        fn read(self) -> (String, File<Open>) {
+            println!("  Reading file: {}", self.name)
+            (String::from("content"), self)
+        }
+
+        fn write(self) -> File<Writing> {
+            println!("  Starting write: {}", self.name)
+            File { name: self.name, _state: PhantomData }
+        }
+
+        fn close(self) -> File<Closed> {
+            println!("  Closing file: {}", self.name)
+            File { name: self.name, _state: PhantomData }
+        }
+    }
+
+    impl File<Writing> {
+        fn write_data(self, data: String) -> File<Writing> {
+            println!("  Writing data: {}", data)
+            self
+        }
+
+        fn finish(self) -> File<Open> {
+            println!("  Finishing write")
+            File { name: self.name, _state: PhantomData }
+        }
+    }
+
+    let file = File::new("test.txt".to_string())
+    let file = file.open()
+    let (content, file) = file.read()
+    println!("  Read: {}", content)
+    let file = file.write()
+    let file = file.write_data("hello".to_string())
+    let file = file.finish()
+    let file = file.close()
+    println!("  File closed")
+
+    // ===== CONST GENERICS ADVANCED =====
+    println!("\n--- Advanced Const Generics ---")
+
+    // Generic array operations
+    fn dot_product<const N: usize>(a: [f64; N], b: [f64; N]) -> f64 {
+        let mut sum = 0.0
+        for i in 0..N {
+            sum += a[i] * b[i]
+        }
+        sum
+    }
+
+    let v1 = [1.0, 2.0, 3.0]
+    let v2 = [4.0, 5.0, 6.0]
+    println!("  Dot product: {}", dot_product(v1, v2))
+
+    // Transpose matrix
+    fn transpose<const R: usize, const C: usize, T: Copy>(m: [[T; C]; R]) -> [[T; R]; C] {
+        let mut result = [[m[0][0]; R]; C]
+        for i in 0..R {
+            for j in 0..C {
+                result[j][i] = m[i][j]
+            }
+        }
+        result
+    }
+
+    let mat = [[1, 2], [3, 4], [5, 6]]
+    let transposed = transpose(mat)
+    println!("  Transposed: {:?}", transposed)
+
+    // ===== RECURSIVE GENERICS =====
+    println!("\n--- Recursive Generics ---")
+
+    trait Tree<T> {
+        fn value(&self) -> &T;
+        fn left(&self) -> Option<&Self>;
+        fn right(&self) -> Option<&Self>;
+    }
+
+    struct Node<T> {
+        value: T,
+        left: Option<Box<Node<T>>>,
+        right: Option<Box<Node<T>>>,
+    }
+
+    impl<T> Tree<T> for Node<T> {
+        fn value(&self) -> &T { &self.value }
+        fn left(&self) -> Option<&Self> { self.left.as_deref() }
+        fn right(&self) -> Option<&Self> { self.right.as_deref() }
+    }
+
+    fn inorder<T: std::fmt::Debug>(node: Option<&impl Tree<T>>) {
+        if let Some(n) = node {
+            inorder(n.left())
+            println!("  {}", format!("{:?}", n.value()))
+            inorder(n.right())
+        }
+    }
+
+    let tree = Node {
+        value: 5,
+        left: Some(Box::new(Node { value: 3, left: None, right: None })),
+        right: Some(Box::new(Node { value: 7, left: None, right: None })),
+    }
+
+    println!("  Inorder traversal:")
+    inorder(Some(&tree))
+
+    // ===== TYPE ERASURE =====
+    println!("\n--- Type Erasure ---")
+
+    trait Draw: std::fmt::Debug {
+        fn draw(&self) -> String;
+    }
+
+    #[derive(Debug)]
+    struct Circle { radius: f64 }
+    #[derive(Debug)]
+    struct Square { side: f64 }
+
+    impl Draw for Circle {
+        fn draw(&self) -> String { format!("Circle(r={})", self.radius) }
+    }
+
+    impl Draw for Square {
+        fn draw(&self) -> String { format!("Square(s={})", self.side) }
+    }
+
+    // Type-erased container
+    struct DrawList {
+        items: Vec<Box<dyn Draw>>,
+    }
+
+    impl DrawList {
+        fn new() -> Self { DrawList { items: Vec::new() } }
+        fn push<D: Draw + 'static>(&mut self, item: D) { self.items.push(Box::new(item)) }
+        fn draw_all(&self) { for item in &self.items { println!("  {}", item.draw()) } }
+    }
+
+    let mut list = DrawList::new()
+    list.push(Circle { radius: 5.0 })
+    list.push(Square { side: 10.0 })
+    list.push(Circle { radius: 3.0 })
+    list.draw_all()
+
+    println!("\n✅ Advanced Generics example completed!")
+}

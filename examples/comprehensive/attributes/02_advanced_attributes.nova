@@ -1,0 +1,327 @@
+// Example 2: Advanced Attributes
+// Demonstrates: attribute macros, derive macros, helper attributes, attribute processing
+
+fn main() {
+    println!("=== Advanced Attributes ===\n")
+
+    // ===== DERIVE MACRO ATTRIBUTES =====
+    println!("--- Derive Macro Attributes ---")
+
+    // Attributes that configure derive macros
+    #[derive(Debug)]
+    #[debug(skip_field)]  // Hypothetical: skip field in Debug
+    struct WithSkip {
+        visible: i32,
+        hidden: String,
+    }
+
+    // Serde-style attributes
+    #[derive(Serialize, Deserialize)]
+    struct SerdeExample {
+        #[serde(rename = "field_name")]
+        different_name: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        optional: Option<i32>,
+
+        #[serde(default)]
+        with_default: i32,
+
+        #[serde(flatten)]
+        extra: std::collections::HashMap<String, String>,
+    }
+
+    println!("  Derive macro attributes shown")
+
+    // ===== HELPER ATTRIBUTES =====
+    println!("\n--- Helper Attributes ---")
+
+    // Attributes that assist other macros
+    #[derive(Builder)]
+    struct BuilderExample {
+        #[builder(default = "default_value()")]
+        optional: String,
+
+        #[builder(setter(into))]
+        into_field: String,
+
+        #[builder(each = "item")]
+        items: Vec<String>,
+    }
+
+    // Diesel-style
+    // #[derive(Queryable, Insertable)]
+    // #[table_name = "users"]
+    // struct User { ... }
+
+    println!("  Helper attributes shown")
+
+    // ===== ATTRIBUTE MACROS =====
+    println!("\n--- Attribute Macros ---")
+
+    // Custom attribute macro definition (in proc-macro crate)
+    //
+    // #[proc_macro_attribute]
+    // pub fn route(attr: TokenStream, item: TokenStream) -> TokenStream {
+    //     let path = parse_macro_input!(attr as LitStr);
+    //     let fn_item = parse_macro_input!(item as ItemFn);
+    //     // Generate router registration code
+    //     let expanded = quote! {
+    //         #fn_item
+    //         inventory::submit! { Route { path: #path.value(), handler: #fn_item.sig.ident } }
+    //     };
+    //     TokenStream::from(expanded)
+    // }
+
+    // Usage:
+    // #[route("/api/users")]
+    // async fn get_users() -> Json<Vec<User>> { ... }
+
+    // #[route("/api/users/:id")]
+    // async fn get_user(id: u64) -> Json<User> { ... }
+
+    println!("  Attribute macro pattern shown")
+
+    // ===== MULTI-ATTRIBUTE MACROS =====
+    println!("\n--- Multi-Attribute Macros ---")
+
+    // Multiple attributes on same item
+    #[get("/users")]
+    #[allow(unauthorized)]
+    #[rate_limit(100)]
+    async fn get_users() -> Json<Vec<User>> {
+        Json(vec![])
+    }
+
+    // Order of attribute macros matters (bottom to top)
+    #[instrument]
+    #[async_trait]
+    async fn traced_function() {
+        // #[instrument] wraps #[async_trait]
+    }
+
+    println!("  Multi-attribute macros shown")
+
+    // ===== ATTRIBUTE TARGETING =====
+    println!("\n--- Attribute Targeting ---")
+
+    // Attributes can target different AST nodes
+    mod targets {
+        // Module
+        #[module_attr]
+        mod inner {}
+
+        // Struct
+        #[struct_attr]
+        struct MyStruct {
+            // Field
+            #[field_attr]
+            field: i32,
+        }
+
+        // Enum
+        #[enum_attr]
+        enum MyEnum {
+            // Variant
+            #[variant_attr]
+            Variant,
+        }
+
+        // Function
+        #[fn_attr]
+        fn my_fn(
+            // Parameter
+            #[param_attr]
+            param: i32,
+        ) -> i32 {
+            0
+        }
+
+        // Implementation
+        #[impl_attr]
+        impl Trait for Type {}
+
+        // Trait
+        #[trait_attr]
+        trait MyTrait {}
+
+        // Type alias
+        #[type_attr]
+        type MyType = i32;
+
+        // Const
+        #[const_attr]
+        const MY_CONST: i32 = 0;
+
+        // Static
+        #[static_attr]
+        static MY_STATIC: i32 = 0;
+
+        // Use
+        #[use_attr]
+        use std::collections::HashMap;
+
+        // Extern crate
+        #[extern_crate_attr]
+        extern crate serde;
+
+        // Macro
+        #[macro_attr]
+        macro_rules! my_macro { () => {} }
+    }
+
+    println!("  Attribute targeting shown")
+
+    // ===== DOCUMENTATION ADVANCED =====
+    println!("\n--- Advanced Documentation ---")
+
+    /// Top-level documentation for this module.
+    ///
+    /// # Panics
+    /// Panics if `x` is negative.
+    ///
+    /// # Errors
+    /// Returns `Err` if computation fails.
+    ///
+    /// # Safety
+    /// This function is unsafe because...
+    #[doc(alias = "add")]
+    #[doc(alias = "sum")]
+    fn advanced_doc(x: i32) -> Result<i32, String> {
+        if x < 0 { Err("Negative".to_string()) } else { Ok(x + 1) }
+    }
+
+    // Doc cfg - show feature in docs
+    #[doc(cfg(feature = "extra"))]
+    fn feature_gated() {}
+
+    // Doc hidden - hide from docs
+    #[doc(hidden)]
+    fn internal_fn() {}
+
+    // Doc include - include external file
+    // #[doc(include = "../README.md")]
+    // mod readme {}
+
+    println!("  Advanced docs shown")
+
+    // ===== PROCEDURAL MACRO HELPERS =====
+    println!("\n--- Proc Macro Helpers ---")
+
+    // darling for derive macros
+    //
+    // #[derive(FromMeta)]
+    // struct MyOptions {
+    //     #[darling(default)]
+    //     name: String,
+    //     #[darling(default = "true")]
+    //     enabled: bool,
+    // }
+    //
+    // #[proc_macro_derive(MyTrait, attributes(my_attr))]
+    // pub fn derive(input: TokenStream) -> TokenStream {
+    //     let opts = MyOptions::from_list(&attr::parse_nested_meta).unwrap();
+    //     // Use opts.name, opts.enabled
+    // }
+
+    // synstructure for struct/enum derive
+    //
+    // #[proc_macro_derive(MyTrait)]
+    // pub fn derive(input: TokenStream) -> TokenStream {
+    //     let s = synstructure::Structure::new(&syn::parse2(input).unwrap());
+    //     s.add_bounds(synstructure::AddBounds::Generics);
+    //     s.gen_impl(quote! {
+    //         gen impl MyTrait for @Self {
+    //             fn method(&self) {
+    //                 match self {
+    //                     @Variant(...) => { ... }
+    //                 }
+    //             }
+    //         }
+    //     })
+    // }
+
+    println!("  Proc macro helpers shown")
+
+    // ===== ATTRIBUTE PROCESSING =====
+    println!("\n--- Attribute Processing ---")
+
+    // In proc macros, process attributes:
+    //
+    // fn process_attrs(attrs: &[Attribute]) -> Result<Options> {
+    //     for attr in attrs {
+    //         if attr.path().is_ident("my_attr") {
+    //             attr.parse_nested_meta(|meta| {
+    //                 if meta.path.is_ident("option") {
+    //                     let value = meta.value()?.parse()?;
+    //                     options.option = value;
+    //                 }
+    //                 Ok(())
+    //             })?;
+    //         }
+    //     }
+    //     Ok(options)
+    // }
+
+    // ===== COMPOUND ATTRIBUTES =====
+    println!("\n--- Compound Attributes ---")
+
+    // Group related attributes
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(feature = "debug", derive(Debug))]
+    struct ConditionalDerive {
+        value: i32,
+    }
+
+    // Multiple cfg
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    fn linux_x86_only() {}
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn mac_or_windows() {}
+
+    println!("  Compound attributes shown")
+
+    // ===== ATTRIBUTE SCOPES =====
+    println!("\n--- Attribute Scopes ---")
+
+    // Outer attributes (before item)
+    #[outer_attribute]
+    struct OuterAttr;
+
+    // Inner attributes (inside block, after {)
+    mod inner_attrs {
+        #![inner_attribute]  // Applies to module
+        #![allow(dead_code)] // Module-level lint
+
+        fn func() {
+            #![allow(unused_variables)]  // Function-level lint
+            let x = 1;
+        }
+    }
+
+    println!("  Attribute scopes shown")
+
+    // ===== ATTRIBUTE MACRO ECOSYSTEM =====
+    println!("\n--- Attribute Macro Ecosystem ---")
+
+    println!("  Popular attribute macro crates:");
+    println!("  - serde: Serialization attributes");
+    println!("  - tokio: #[tokio::main], #[tokio::test]");
+    println!("  - actix-web: #[get], #[post], #[route]");
+    println!("  - clap: #[derive(Parser)] with #[arg(...)]");
+    println!("  - sqlx: #[sqlx::test], query macros");
+    println!("  - tracing: #[instrument], #[trace]");
+    println!("  - async-trait: #[async_trait]");
+    println!("  - thiserror: #[derive(Error)]");
+    println!("  - anyhow: #[derive(Error)] (context)");
+    println!("  - validator: #[derive(Validate)] with #[validate(...)]");
+
+    println!("\n✅ Advanced Attributes example completed!")
+}
+
+// Mock types for compilation
+mod Json {
+    pub struct Json<T>(pub T);
+}
+struct User;

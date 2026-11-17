@@ -1,0 +1,331 @@
+// Example 2: Advanced Error Handling Patterns
+// Demonstrates: custom error types, error contexts, recovery strategies, panic handling
+
+fn main() {
+    println!("=== Advanced Error Handling ===\n")
+
+    use std::fmt
+    use std::error::Error
+    use std::io
+
+    // ===== CUSTOM ERROR TYPE WITH CONTEXT =====
+    #[derive(Debug)]
+    enum ConfigError {
+        FileNotFound { path: String },
+        ParseError { line: usize, message: String },
+        InvalidValue { key: String, value: String, expected: String },
+        Io(io::Error),
+    }
+
+    impl fmt::Display for ConfigError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                ConfigError::FileNotFound { path } => write!(f, "Config file not found: {}", path),
+                ConfigError::ParseError { line, message } => write!(f, "Parse error at line {}: {}", line, message),
+                ConfigError::InvalidValue { key, value, expected } => write!(f, "Invalid value for '{}': got '{}', expected {}", key, value, expected),
+                ConfigError::Io(e) => write!(f, "IO error: {}", e),
+            }
+        }
+    }
+
+    impl Error for ConfigError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            match self {
+                ConfigError::Io(e) => Some(e),
+                _ => None,
+            }
+        }
+    }
+
+    impl From<io::Error> for ConfigError {
+        fn from(e: io::Error) -> Self {
+            ConfigError::Io(e)
+        }
+    }
+
+    // ===== PARSING WITH DETAILED ERRORS =====
+    fn parse_config(content: &str) -> Result<HashMap<String, String>, ConfigError> {
+        let mut config = HashMap::new()
+
+        for (line_num, line) in content.lines().enumerate() {
+            let line = line.trim()
+            if line.is_empty() || line.starts_with('#') { continue }
+
+            let parts: Vec<&str> = line.splitn(2, '=').collect()
+            if parts.len() != 2 {
+                return Err(ConfigError::ParseError {
+                    line: line_num + 1,
+                    message: format!("Expected key=value, got '{}'", line),
+                })
+            }
+
+            let key = parts[0].trim().to_string()
+            let value = parts[1].trim().to_string()
+
+            if key.is_empty() {
+                return Err(ConfigError::ParseError {
+                    line: line_num + 1,
+                    message: "Empty key".to_string(),
+                })
+            }
+
+            config.insert(key, value)
+        }
+
+        Ok(config)
+    }
+
+    // ===== VALIDATION WITH CONTEXT =====
+    fn validate_config(config: &HashMap<String, String>) -> Result<(), ConfigError> {
+        // Required keys
+        let required = ["port", "host", "database_url"]
+        for key in required {
+            if !config.contains_key(key) {
+                return Err(ConfigError::InvalidValue {
+                    key: key.to_string(),
+                    value: "missing".to_string(),
+                    expected: "required field".to_string(),
+                })
+            }
+        }
+
+        // Validate port
+        if let Some(port_str) = config.get("port") {
+            let port: u16 = port_str.parse().map_err(|_| ConfigError::InvalidValue {
+                key: "port".to_string(),
+                value: port_str.clone(),
+                expected: "valid port number (1-65535)".to_string(),
+            })?;
+
+            if port == 0 {
+                return Err(ConfigError::InvalidValue {
+                    key: "port".to_string(),
+                    value: port_str.clone(),
+                    expected: "non-zero port".to_string(),
+                })
+            }
+        }
+
+        Ok(())
+    }
+
+    // ===== ERROR RECOVERY STRATEGIES =====
+    println!("--- Error Recovery ---")
+
+    fn try_primary() -> Result<String, &str> {
+        Err("Primary failed")
+    }
+
+    fn try_secondary() -> Result<String, &str> {
+        Ok("Secondary succeeded".to_string())
+    }
+
+    fn try_fallback() -> Result<String, &str> {
+        Ok("Fallback value".to_string())
+    }
+
+    // Try multiple strategies
+    let result = try_primary()
+        .or_else(|_| try_secondary())
+        .or_else(|_| try_fallback())
+
+    println!("Recovery result: {:?}", result)
+
+    // Retry with backoff
+    fn with_retry<F, T, E>(mut op: F, max_retries: u32) -> Result<T, E>
+    where F: FnMut() -> Result<T, E> {
+        let mut last_err = None
+        for attempt in 0..=max_retries {
+            match op() {
+                Ok(val) => return Ok(val),
+                Err(e) => {
+                    last_err = Some(e)
+                    if attempt < max_retries {
+                        std::thread::sleep(std::time::Duration::from_millis(100 * 2_u64.pow(attempt)))
+                    }
+                }
+            }
+        }
+        Err(last_err.unwrap())
+    }
+
+    let mut attempts = 0
+    let retry_result = with_retry(|| {
+        attempts += 1
+        if attempts < 3 { Err("Temporary failure") } else { Ok("Success after retries") }
+    }, 3)
+
+    println!("Retry result: {:?} (attempts: {})", retry_result, attempts)
+
+    // ===== PARTIAL RESULTS =====
+    println!("\n--- Partial Results ---")
+
+    fn process_items(items: &[&str]) -> (Vec<String>, Vec<String>) {
+        let mut successes = Vec::new()
+        let mut failures = Vec::new()
+
+        for item in items {
+            match process_one(item) {
+                Ok(result) => successes.push(result),
+                Err(e) => failures.push(format!("{}: {}", item, e)),
+            }
+        }
+
+        (successes, failures)
+    }
+
+    fn process_one(item: &str) -> Result<String, &str> {
+        if item.contains("fail") { Err("Processing failed") }
+        else { Ok(format!("Processed: {}", item)) }
+    }
+
+    let items = ["item1", "fail_item", "item2", "another_fail", "item3"]
+    let (ok, err) = process_items(&items)
+    println!("Successes: {:?}", ok)
+    println!("Failures: {:?}", err)
+
+    // ===== ERROR BOUNDARIES =====
+    println!("\n--- Error Boundaries ---")
+
+    // Using catch_unwind for panic safety
+    use std::panic::{catch_unwind, AssertUnwindSafe}
+
+    fn risky_operation(input: &str) -> Result<String, String> {
+        if input == "panic" {
+            panic!("Intentional panic!")
+        }
+        Ok(format!("Result: {}", input))
+    }
+
+    let result = catch_unwind(AssertUnwindSafe(|| risky_operation("panic")))
+    match result {
+        Ok(Ok(val)) => println!("Success: {}", val),
+        Ok(Err(e)) => println!("Error: {}", e),
+        Err(_) => println!("Caught panic!"),
+    }
+
+    let result2 = catch_unwind(AssertUnwindSafe(|| risky_operation("normal")))
+    println!("Normal: {:?}", result2)
+
+    // ===== ERROR LOGGING AND REPORTING =====
+    println!("\n--- Error Reporting ---")
+
+    fn log_error<E: Error>(context: &str, error: &E) {
+        eprintln!("[ERROR] {}: {}", context, error)
+        if let Some(source) = error.source() {
+            eprintln!("  Caused by: {}", source)
+            if let Some(source2) = source.source() {
+                eprintln!("  Caused by: {}", source2)
+            }
+        }
+    }
+
+    let io_err = io::Error::new(io::ErrorKind::NotFound, "file.txt")
+    let config_err = ConfigError::Io(io_err)
+    log_error("Loading config", &config_err)
+
+    // ===== RESULT EXTENSION TRAITS =====
+    println!("\n--- Extension Methods ---")
+
+    trait ResultExt<T, E> {
+        fn tap_ok(self, f: impl FnOnce(&T)) -> Self;
+        fn tap_err(self, f: impl FnOnce(&E)) -> Self;
+        fn map_err_str(self) -> Result<T, String> where E: fmt::Display;
+    }
+
+    impl<T, E> ResultExt<T, E> for Result<T, E> {
+        fn tap_ok(self, f: impl FnOnce(&T)) -> Self {
+            if let Ok(ref v) = self { f(v) }
+            self
+        }
+
+        fn tap_err(self, f: impl FnOnce(&E)) -> Self {
+            if let Err(ref e) = self { f(e) }
+            self
+        }
+
+        fn map_err_str(self) -> Result<T, String>
+        where E: fmt::Display {
+            self.map_err(|e| e.to_string())
+        }
+    }
+
+    let result: Result<i32, &str> = Ok(42)
+        .tap_ok(|v| println!("  Got value: {}", v))
+        .tap_err(|e| println!("  Error: {}", e))
+
+    let err_result: Result<i32, &str> = Err("failed")
+        .tap_ok(|v| println!("  Got value: {}", v))
+        .tap_err(|e| println!("  Error: {}", e))
+
+    println!("tap_ok/tap_err demo done")
+
+    // ===== TRY FROM/INTO =====
+    println!("\n--- TryFrom / TryInto ---")
+
+    #[derive(Debug, PartialEq)]
+    struct PositiveInt(i32)
+
+    impl TryFrom<i32> for PositiveInt {
+        type Error = String
+
+        fn try_from(value: i32) -> Result<Self, Self::Error> {
+            if value > 0 { Ok(PositiveInt(value)) }
+            else { Err("Must be positive".to_string()) }
+        }
+    }
+
+    let pos = PositiveInt::try_from(42)
+    println!("TryFrom 42: {:?}", pos)
+
+    let neg = PositiveInt::try_from(-5)
+    println!("TryFrom -5: {:?}", neg)
+
+    // Using try_into
+    let val: Result<PositiveInt, _> = 100.try_into()
+    println!("try_into 100: {:?}", val)
+
+    // ===== NEVER TYPE FOR EXHAUSTIVE MATCHING =====
+    println!("\n--- Exhaustive Matching ---")
+
+    enum Status {
+        Success,
+        Failure(String),
+        Pending,
+    }
+
+    fn handle_status(status: Status) -> Result<(), String> {
+        match status {
+            Status::Success => Ok(()),
+            Status::Failure(msg) => Err(msg),
+            Status::Pending => Err("Still pending".to_string()),
+        }
+    }
+
+    // If we add a new variant to Status, this function will fail to compile
+    // unless we handle it - ensuring exhaustive matching
+
+    println!("handle_status(Success): {:?}", handle_status(Status::Success))
+    println!("handle_status(Failure): {:?}", handle_status(Status::Failure("oops".to_string())))
+    println!("handle_status(Pending): {:?}", handle_status(Status::Pending))
+
+    // ===== ERROR BOUNDS IN GENERICS =====
+    println!("\n--- Generic Error Bounds ---")
+
+    fn process_with_error<T, E>(input: T, processor: impl FnOnce(T) -> Result<T, E>) -> Result<T, E>
+    where E: Error + Send + Sync + 'static {
+        processor(input)
+    }
+
+    fn string_processor(s: String) -> Result<String, Box<dyn Error>> {
+        if s.is_empty() { Err("Empty string".into()) }
+        else { Ok(s.to_uppercase()) }
+    }
+
+    println!("Generic processor: {:?}", process_with_error("hello".to_string(), string_processor))
+    println!("Generic processor empty: {:?}", process_with_error("".to_string(), string_processor))
+
+    println!("\n✅ Advanced Error Handling example completed!")
+}
+
+use std::collections::HashMap

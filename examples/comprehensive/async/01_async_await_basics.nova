@@ -1,0 +1,270 @@
+// Example 1: Async/Await Basics
+// Demonstrates: async fn, .await, futures, executors, spawn, join
+
+fn main() {
+    println!("=== Async/Await Basics ===\n")
+
+    use std::future::Future
+    use std::pin::Pin
+    use std::task::{Context, Poll, Wake, Waker}
+    use std::sync::{Arc, Mutex}
+    use std::time::Duration
+
+    // ===== BASIC ASYNC FUNCTIONS =====
+    println!("--- Basic Async Functions ---")
+
+    async fn hello() -> String {
+        "Hello, Async!".to_string()
+    }
+
+    async fn add_async(a: i32, b: i32) -> i32 {
+        a + b
+    }
+
+    // Running async code
+    let result = std::task::block_on(hello())
+    println!("block_on hello: {}", result)
+
+    let sum = std::task::block_on(add_async(10, 20))
+    println!("block_on add: {}", sum)
+
+    // ===== AWAITING FUTURES =====
+    println!("\n--- Awaiting Futures ---")
+
+    async fn fetch_user(id: u32) -> String {
+        // Simulate async I/O
+        std::task::sleep(Duration::from_millis(10)).await
+        format!("User-{}", id)
+    }
+
+    async fn fetch_multiple() {
+        // Sequential awaits
+        let user1 = fetch_user(1).await
+        let user2 = fetch_user(2).await
+        println!("  Sequential: {} and {}", user1, user2)
+
+        // Concurrent with join!
+        let (user3, user4) = std::task::join(fetch_user(3), fetch_user(4)).await
+        println!("  Concurrent: {} and {}", user3, user4)
+    }
+
+    std::task::block_on(fetch_multiple())
+
+    // ===== ASYNC BLOCKS =====
+    println!("\n--- Async Blocks ---")
+
+    let future = async {
+        let x = 10
+        let y = 20
+        x + y
+    }
+
+    let result = std::task::block_on(future)
+    println!("  Async block result: {}", result)
+
+    // Async move block
+    let data = vec![1, 2, 3]
+    let future = async move {
+        data.iter().sum::<i32>()
+    }
+    println!("  Async move block: {}", std::task::block_on(future))
+
+    // ===== SPawning TASKS =====
+    println!("\n--- Spawning Tasks ---")
+
+    async fn background_task(id: u32) {
+        for i in 1..=3 {
+            println!("  Task {}: step {}", id, i)
+            std::task::sleep(Duration::from_millis(50)).await
+        }
+    }
+
+    let handle1 = std::task::spawn(background_task(1))
+    let handle2 = std::task::spawn(background_task(2))
+
+    std::task::block_on(async {
+        handle1.await
+        handle2.await
+    })
+
+    println!("  Both tasks completed")
+
+    // ===== JOIN MULTIPLE FUTURES =====
+    println!("\n--- Join Multiple Futures ---")
+
+    async fn timed_task(name: &str, ms: u64) -> String {
+        std::task::sleep(Duration::from_millis(ms)).await
+        format!("{} done", name)
+    }
+
+    // join! - waits for all
+    let results = std::task::block_on(async {
+        std::task::join(
+            timed_task("fast", 50),
+            timed_task("medium", 100),
+            timed_task("slow", 150),
+        ).await
+    });
+    println!("  join: {:?}", results)
+
+    // try_join! - stops on first error
+    async fn fallible_task(succeed: bool) -> Result<String, &str> {
+        std::task::sleep(Duration::from_millis(50)).await
+        if succeed { Ok("success") } else { Err("failed") }
+    }
+
+    let results = std::task::block_on(async {
+        std::task::try_join(
+            fallible_task(true),
+            fallible_task(true),
+        ).await
+    });
+    println!("  try_join (all ok): {:?}", results)
+
+    let results = std::task::block_on(async {
+        std::task::try_join(
+            fallible_task(true),
+            fallible_task(false),
+        ).await
+    });
+    println!("  try_join (one err): {:?}", results)
+
+    // ===== SELECT! (RACE) =====
+    println!("\n--- Select (Race) ---")
+
+    async fn race_example() {
+        let fast = async {
+            std::task::sleep(Duration::from_millis(50)).await
+            "fast"
+        };
+
+        let slow = async {
+            std::task::sleep(Duration::from_millis(200)).await
+            "slow"
+        };
+
+        // select! returns the first completed future
+        let winner = std::task::select(fast, slow).await
+        println!("  Winner: {}", winner)
+    }
+
+    std::task::block_on(race_example())
+
+    // ===== TIMEOUT =====
+    println!("\n--- Timeout ---")
+
+    async fn slow_operation() -> String {
+        std::task::sleep(Duration::from_millis(200)).await
+        "completed".to_string()
+    }
+
+    let result = std::task::block_on(async {
+        std::task::timeout(Duration::from_millis(100), slow_operation()).await
+    });
+
+    match result {
+        Ok(val) => println!("  Completed: {}", val),
+        Err(_) => println!("  Timed out!"),
+    }
+
+    // Timeout that succeeds
+    let result = std::task::block_on(async {
+        std::task::timeout(Duration::from_millis(300), slow_operation()).await
+    });
+    match result {
+        Ok(val) => println!("  Completed in time: {}", val),
+        Err(_) => println!("  Timed out!"),
+    }
+
+    // ===== ASYNC ITERATORS (STREAMS) =====
+    println!("\n--- Async Iterators (Streams) ---")
+
+    use std::task::stream::{Stream, StreamExt}
+
+    async fn number_stream() -> impl Stream<Item = i32> {
+        let nums = vec![1, 2, 3, 4, 5]
+        std::task::stream::iter(nums)
+    }
+
+    std::task::block_on(async {
+        let mut stream = number_stream().await
+        while let Some(num) = stream.next().await {
+            println!("  Stream item: {}", num)
+        }
+    })
+
+    // Map on stream
+    std::task::block_on(async {
+        let stream = number_stream().await
+        let doubled: Vec<i32> = stream.map(|x| x * 2).collect().await
+        println!("  Mapped stream: {:?}", doubled)
+    })
+
+    // ===== ASYNC CLOSURES =====
+    println!("\n--- Async Closures ---")
+
+    let async_closure = async |x: i32| -> i32 {
+        std::task::sleep(Duration::from_millis(10)).await
+        x * 2
+    };
+
+    let result = std::task::block_on(async_closure(21))
+    println!("  Async closure: {}", result)
+
+    // ===== FUTURE EXTENSIONS =====
+    println!("\n--- Future Extensions ---")
+
+    trait FutureExt: Future {
+        fn map<U, F>(self, f: F) -> Map<Self, F>
+        where Self: Sized, F: FnOnce(Self::Output) -> U {
+            Map { future: self, f: Some(f) }
+        }
+    }
+
+    impl<T: Future> FutureExt for T {}
+
+    struct Map<Fut, F> {
+        future: Fut,
+        f: Option<F>,
+    }
+
+    impl<Fut, F, U> Future for Map<Fut, F>
+    where Fut: Future, F: FnOnce(Fut::Output) -> U {
+        type Output = U
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<U> {
+            let future = unsafe { self.as_mut().map_unchecked_mut(|s| &mut s.future) }
+            match future.poll(cx) {
+                Poll::Ready(val) => Poll::Ready(self.f.take().unwrap()(val)),
+                Poll::Pending => Poll::Pending,
+            }
+        }
+    }
+
+    // Usage
+    let future = async { 42 }.map(|x| x * 2)
+    println!("  Extended future: {}", std::task::block_on(future))
+
+    // ===== ASYNC DROP =====
+    println!("\n--- Async Drop ---")
+
+    struct AsyncResource {
+        name: String,
+    }
+
+    impl Drop for AsyncResource {
+        fn drop(&mut self) {
+            println!("  Dropping {}", self.name)
+        }
+    }
+
+    async fn use_resource() {
+        let _resource = AsyncResource { name: "Resource".to_string() }
+        std::task::sleep(Duration::from_millis(10)).await
+        // Resource dropped here
+    }
+
+    std::task::block_on(use_resource())
+    println!("  After async function")
+
+    println!("\n✅ Async/Await Basics example completed!")
+}

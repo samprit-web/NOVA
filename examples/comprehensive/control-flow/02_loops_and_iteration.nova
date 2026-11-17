@@ -1,0 +1,156 @@
+// Example 2: Loops and Iteration
+// Demonstrates: loop, while, for, break, continue, labels, range iteration
+
+fn main() {
+    println!("=== Loops & Iteration ===\n")
+
+    // ===== INFINITE LOOP (loop) =====
+    println!("1. Infinite loop with break:")
+    let mut count = 0
+    loop {
+        count += 1
+        if count == 3 {
+            println!("  Breaking at count = {}", count)
+            break
+        }
+        println!("  Count: {}", count)
+    }
+
+    // ===== LOOP AS EXPRESSION =====
+    println!("\n2. Loop returning value:")
+    let result = loop {
+        count += 1
+        if count == 5 {
+            break count * 2  // return value from loop
+        }
+    }
+    println!("Loop returned: {}", result)
+
+    // ===== WHILE LOOP =====
+    println!("\n3. While loop:")
+    let mut n = 3
+    while n > 0 {
+        println!("  While: n = {}", n)
+        n -= 1
+    }
+
+    // ===== WHILE WITH CONDITION =====
+    println!("\n4. While with complex condition:")
+    let mut x = 0
+    let mut y = 10
+    while x < 5 && y > 5 {
+        x += 1
+        y -= 1
+        println!("  x={}, y={}", x, y)
+    }
+
+    // ===== FOR LOOP OVER RANGE =====
+    println!("\n5. For loop over range:")
+    for i in 1..=5 {  // inclusive range
+        println!("  i = {}", i)
+    }
+
+    println!("\n6. For loop over exclusive range:")
+    for i in 0..5 {  // exclusive range
+        println!("  i = {}", i)
+    }
+
+    // ===== FOR LOOP OVER ARRAY/SLICE =====
+    println!("\n7. For loop over array:")
+    let numbers = [10, 20, 30, 40, 50]
+    for num in numbers {
+        println!("  num = {}", num)
+    }
+
+    // ===== FOR LOOP WITH ENUMERATE =====
+    println!("\n8. For loop with enumerate:")
+    let fruits = ["apple", "banana", "cherry"]
+    for (index, fruit) in fruits.iter().enumerate() {
+        println!("  [{}] {}", index, fruit)
+    }
+
+    // ===== FOR LOOP OVER VECTOR =====
+    println!("\n9. For loop over vector:")
+    let mut vec = vec![1, 2, 3]
+    for item in &mut vec {
+        *item *= 2
+    }
+    println!("  Doubled: {:?}", vec)
+
+    // ===== NESTED LOOPS =====
+    println!("\n10. Nested loops:")
+    for i in 1..=3 {
+        for j in 1..=3 {
+            print!("  ({},{})", i, j)
+        }
+        println!()
+    }
+
+    // ===== BREAK AND CONTINUE =====
+    println!("\n11. Break and continue:")
+    for i in 1..=10 {
+        if i == 3 {
+            continue  // skip 3
+        }
+        if i == 7 {
+            break  // stop at 7
+        }
+        println!("  i = {}", i)
+    }
+
+    // ===== LABELED LOOPS =====
+    println!("\n12. Labeled loops (break/continue outer):")
+    'outer: for i in 1..=3 {
+        'inner: for j in 1..=3 {
+            if i == 2 && j == 2 {
+                println!("  Breaking outer at i={}, j={}", i, j)
+                break 'outer
+            }
+            println!("  i={}, j={}", i, j)
+        }
+    }
+
+    // ===== LOOP WITH ELSE (while let pattern) =====
+    println!("\n13. While let pattern:")
+    let mut stack = vec![1, 2, 3]
+    while let Some(top) = stack.pop() {
+        println!("  Popped: {}", top)
+    }
+    println!("  Stack empty")
+
+    // ===== FOR LOOP WITH PATTERN MATCHING =====
+    println!("\n14. For with tuple destructuring:")
+    let pairs = [(1, "one"), (2, "two"), (3, "three")]
+    for (num, word) in pairs {
+        println!("  {} -> {}", num, word)
+    }
+
+    // ===== ITERATOR METHODS IN FOR =====
+    println!("\n15. Iterator methods:")
+    let sum: i32 = (1..=10).filter(|x| x % 2 == 0).map(|x| x * 2).sum()
+    println!("  Sum of doubled evens 1..10: {}", sum)
+
+    // Collect into vector
+    let doubled: Vec<i32> = (1..=5).map(|x| x * 2).collect()
+    println!("  Collected: {:?}", doubled)
+
+    // ===== REV (REVERSE) =====
+    println!("\n16. Reverse iteration:")
+    for i in (1..=5).rev() {
+        println!("  {}", i)
+    }
+
+    // ===== STEP BY =====
+    println!("\n17. Step by:")
+    for i in (0..20).step_by(3) {
+        println!("  {}", i)
+    }
+
+    // ===== TAKE AND SKIP =====
+    println!("\n18. Take and skip:")
+    for i in (1..=10).skip(3).take(4) {
+        println!("  {}", i)
+    }
+
+    println!("\n✅ Loops & Iteration example completed!")
+}

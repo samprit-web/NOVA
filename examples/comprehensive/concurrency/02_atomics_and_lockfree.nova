@@ -1,0 +1,295 @@
+// Example 2: Atomics and Lock-Free Programming
+// Demonstrates: Atomic types, memory ordering, lock-free data structures, parallel patterns
+
+fn main() {
+    println!("=== Atomics & Lock-Free ===\n")
+
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
+    use std::sync::Arc
+    use std::thread
+    use std::time::Duration
+
+    // ===== ATOMIC BOOL =====
+    println!("--- AtomicBool ---")
+
+    let flag = Arc::new(AtomicBool::new(false))
+    let flag2 = Arc::clone(&flag)
+
+    let handle = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50))
+        flag2.store(true, Ordering::Release)
+        println!("  Worker: Set flag to true")
+    })
+
+    // Spin wait
+    while !flag.load(Ordering::Acquire) {
+        thread::yield_now()
+    }
+    println!("  Main: Flag is now true")
+
+    handle.join().unwrap()
+
+    // ===== ATOMIC INTEGER OPERATIONS =====
+    println!("\n--- Atomic Integer Operations ---")
+
+    let counter = Arc::new(AtomicU64::new(0))
+    let mut handles = vec![]
+
+    for i in 0..10 {
+        let counter = Arc::clone(&counter)
+        let handle = thread::spawn(move || {
+            for _ in 0..1000 {
+                // Fetch-and-add
+                counter.fetch_add(1, Ordering::Relaxed)
+            }
+            println!("  Thread {} done", i)
+        })
+        handles.push(handle)
+    }
+
+    for h in handles { h.join().unwrap() }
+    println!("  Final counter: {} (expected 10000)", counter.load(Ordering::Relaxed))
+
+    // Compare-and-swap (CAS)
+    println!("\n--- Compare-and-Swap ---")
+    let value = AtomicU32::new(10)
+
+    let old = value.compare_exchange(10, 20, Ordering::AcqRel, Ordering::Relaxed)
+    println!("  CAS 10->20: {:?}, current: {}", old, value.load(Ordering::Relaxed))
+
+    let old = value.compare_exchange(10, 30, Ordering::AcqRel, Ordering::Relaxed)
+    println!("  CAS 10->30 (fail): {:?}, current: {}", old, value.load(Ordering::Relaxed))
+
+    // Compare-exchange-weak (can spuriously fail)
+    let mut expected = 20
+    while value.compare_exchange_weak(expected, 40, Ordering::AcqRel, Ordering::Relaxed).is_err() {
+        expected = value.load(Ordering::Relaxed)
+        if expected != 20 { break }
+    }
+    println!("  CAS weak 20->40: current = {}", value.load(Ordering::Relaxed))
+
+    // Fetch operations
+    println!("\n--- Fetch Operations ---")
+    let fetch_counter = AtomicU64::new(100)
+
+    println!("  fetch_add(10): {} -> {}", fetch_counter.load(Ordering::Relaxed), fetch_counter.fetch_add(10, Ordering::Relaxed) + 10)
+    println!("  fetch_sub(5): {} -> {}", fetch_counter.load(Ordering::Relaxed), fetch_counter.fetch_sub(5, Ordering::Relaxed) - 5)
+    println!("  fetch_and(0xF): {}", fetch_counter.fetch_and(0xF, Ordering::Relaxed))
+    println!("  fetch_or(0xF0): {}", fetch_counter.fetch_or(0xF0, Ordering::Relaxed))
+    println!("  fetch_xor(0xFF): {}", fetch_counter.fetch_xor(0xFF, Ordering::Relaxed))
+    println!("  fetch_max(200): {}", fetch_counter.fetch_max(200, Ordering::Relaxed))
+    println!("  fetch_min(50): {}", fetch_counter.fetch_min(50, Ordering::Relaxed))
+
+    // ===== MEMORY ORDERING =====
+    println!("\n--- Memory Ordering ---")
+
+    // Relaxed: no ordering guarantees, only atomicity
+    let relaxed = AtomicU32::new(0)
+    relaxed.store(42, Ordering::Relaxed)
+    println!("  Relaxed: {}", relaxed.load(Ordering::Relaxed))
+
+    // Release/Acquire: synchronizes with matching acquire/release
+    let release_store = Arc::new(AtomicU32::new(0))
+    let release_load = Arc::clone(&release_store)
+
+    thread::spawn(move || {
+        release_store.store(1, Ordering::Release)
+        release_store.store(2, Ordering::Release)
+    }).join().unwrap()
+
+    // Acquire load sees all stores before the release
+    println!("  Release/Acquire: {}", release_load.load(Ordering::Acquire))
+
+    // SeqCst: sequentially consistent (strongest)
+    let seq = AtomicU32::new(0)
+    seq.store(1, Ordering::SeqCst)
+    seq.store(2, Ordering::SeqCst)
+    println!("  SeqCst: {}", seq.load(Ordering::SeqCst))
+
+    // ===== LOCK-FREE STACK =====
+    println!("\n--- Lock-Free Stack ---")
+
+    #[derive(Debug)]
+    struct Node<T> {
+        value: T,
+        next: *mut Node<T>,
+    }
+
+    struct LockFreeStack<T> {
+        head: AtomicUsize,
+    }
+
+    impl<T> LockFreeStack<T> {
+        fn new() -> Self {
+            LockFreeStack { head: AtomicUsize::new(0) }
+        }
+
+        fn push(&self, value: T) {
+            let new_node = Box::into_raw(Box::new(Node { value, next: std::ptr::null_mut() }))
+            let new_node_ptr = new_node as usize
+
+            loop {
+                let old_head = self.head.load(Ordering::Acquire)
+                unsafe { (*new_node).next = old_head as *mut Node<T> }
+                match self.head.compare_exchange_weak(
+                    old_head, new_node_ptr, Ordering::Release, Ordering::Relaxed
+                ) {
+                    Ok(_) => return,
+                    Err(_) => continue,
+                }
+            }
+        }
+
+        fn pop(&self) -> Option<T> {
+            loop {
+                let old_head = self.head.load(Ordering::Acquire)
+                if old_head == 0 { return None }
+
+                let next = unsafe { (*(old_head as *mut Node<T>)).next as usize }
+                match self.head.compare_exchange_weak(
+                    old_head, next, Ordering::Release, Ordering::Relaxed
+                ) {
+                    Ok(_) => {
+                        let node = unsafe { Box::from_raw(old_head as *mut Node<T>) }
+                        return Some(node.value)
+                    }
+                    Err(_) => continue,
+                }
+            }
+        }
+    }
+
+    let stack = Arc::new(LockFreeStack::new())
+    let mut handles = vec![]
+
+    // Producers
+    for i in 0..5 {
+        let stack = Arc::clone(&stack)
+        handles.push(thread::spawn(move || {
+            for j in 0..10 {
+                stack.push(format!("Thread{}-Item{}", i, j))
+            }
+        }))
+    }
+
+    // Consumers
+    for i in 0..3 {
+        let stack = Arc::clone(&stack)
+        handles.push(thread::spawn(move || {
+            for _ in 0..15 {
+                if let Some(item) = stack.pop() {
+                    println!("  Consumer {} got: {}", i, item)
+                }
+                thread::sleep(Duration::from_millis(1))
+            }
+        }))
+    }
+
+    for h in handles { h.join().unwrap() }
+
+    // ===== ATOMIC REFERENCE COUNTING =====
+    println!("\n--- Arc with Atomics ---")
+
+    let shared = Arc::new(AtomicU64::new(0))
+    let mut handles = vec![]
+
+    for _ in 0..5 {
+        let shared = Arc::clone(&shared)
+        handles.push(thread::spawn(move || {
+            for _ in 0..1000 {
+                shared.fetch_add(1, Ordering::Relaxed)
+            }
+        }))
+    }
+
+    for h in handles { h.join().unwrap() }
+    println!("  Arc<AtomicU64> final: {}", shared.load(Ordering::Relaxed))
+
+    // ===== ONCE CELL (LAZY INITIALIZATION) =====
+    println!("\n--- OnceCell / Lazy ---")
+
+    use std::sync::OnceLock
+
+    static GLOBAL: OnceLock<String> = OnceLock::new()
+
+    fn get_global() -> &'static String {
+        GLOBAL.get_or_init(|| {
+            println!("  Initializing global...")
+            "Hello, World!".to_string()
+        })
+    }
+
+    println!("  First access: {}", get_global())
+    println!("  Second access: {}", get_global())
+
+    // Thread-safe lazy
+    use std::sync::LazyLock
+
+    static LAZY: LazyLock<Vec<u32>> = LazyLock::new(|| {
+        println!("  Computing expensive vector...")
+        (0..100).collect()
+    })
+
+    println!("  Lazy vector len: {}", LAZY.len())
+    println!("  Lazy vector first 5: {:?}", &LAZY[..5])
+
+    // ===== PARK AND UNPARK =====
+    println!("\n--- Park/Unpark ---")
+
+    let parked = Arc::new(AtomicBool::new(false))
+    let parked2 = Arc::clone(&parked)
+
+    let handle = thread::spawn(move || {
+        println!("  Worker: Parking...")
+        thread::park()
+        println!("  Worker: Unparked!")
+        parked2.store(true, Ordering::Release)
+    })
+
+    thread::sleep(Duration::from_millis(50))
+    println!("  Main: Unparking worker...")
+    handle.thread().unpark()
+    handle.join().unwrap()
+
+    println!("  Parked flag: {}", parked.load(Ordering::Acquire))
+
+    // ===== CROSSBEAM PATTERNS (SIMULATED) =====
+    println!("\n--- Scoped Parallel Patterns ---")
+
+    // Parallel map
+    let data: Vec<u32> = (0..100).collect()
+    let results: Vec<u32> = thread::scope(|s| {
+        let mut handles = vec![]
+        let chunk_size = 25
+
+        for chunk in data.chunks(chunk_size) {
+            let chunk = chunk.to_vec()
+            handles.push(s.spawn(move || {
+                chunk.iter().map(|x| x * 2).collect::<Vec<_>>()
+            }))
+        }
+
+        handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    });
+
+    println!("  Parallel map first 10: {:?}", &results[..10])
+
+    // Parallel reduce
+    let sum: u32 = thread::scope(|s| {
+        let mut handles = vec![]
+        let chunk_size = 25
+
+        for chunk in data.chunks(chunk_size) {
+            let chunk = chunk.to_vec()
+            handles.push(s.spawn(move || {
+                chunk.iter().sum::<u32>()
+            }))
+        }
+
+        handles.into_iter().map(|h| h.join().unwrap()).sum()
+    });
+
+    println!("  Parallel sum: {} (expected {})", sum, data.iter().sum::<u32>())
+
+    println!("\n✅ Atomics & Lock-Free example completed!")
+}

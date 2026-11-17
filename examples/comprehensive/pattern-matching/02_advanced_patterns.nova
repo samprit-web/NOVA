@@ -1,0 +1,304 @@
+// Example 2: Advanced Pattern Matching
+// Demonstrates: exhaustiveness, or-patterns, range patterns, slice patterns, refutability
+
+fn main() {
+    println!("=== Advanced Pattern Matching ===\n")
+
+    // ===== EXHAUSTIVENESS CHECKING =====
+    println!("--- Exhaustiveness ---")
+
+    enum Direction {
+        North,
+        South,
+        East,
+        West,
+    }
+
+    // This is exhaustive - all variants covered
+    fn describe_dir(dir: Direction) -> &'static str {
+        match dir {
+            Direction::North => "North",
+            Direction::South => "South",
+            Direction::East => "East",
+            Direction::West => "West",
+        }
+    }
+
+    // Adding a new variant to Direction would cause compile error here
+    println!("  North: {}", describe_dir(Direction::North))
+
+    // Non-exhaustive with _
+    fn describe_dir_partial(dir: Direction) -> &'static str {
+        match dir {
+            Direction::North => "North",
+            _ => "Other",
+        }
+    }
+
+    println!("  South (partial): {}", describe_dir_partial(Direction::South))
+
+    // ===== OR-PATTERNS =====
+    println!("\n--- Or-Patterns ---")
+
+    let key = 'q'
+
+    match key {
+        'q' | 'Q' => println!("  Quit"),
+        'h' | 'H' | '?' => println!("  Help"),
+        's' | 'S' => println!("  Save"),
+        _ => println!("  Other"),
+    }
+
+    // With ranges
+    let code = 200
+    match code {
+        100..=199 | 200..=299 => println!("  Success"),
+        300..=399 => println!("  Redirect"),
+        400..=499 | 500..=599 => println!("  Error"),
+        _ => println!("  Unknown"),
+    }
+
+    // ===== SLICE PATTERNS ADVANCED =====
+    println!("\n--- Advanced Slice Patterns ---")
+
+    fn analyze_slice(slice: &[i32]) {
+        match slice {
+            [] => println!("  Empty"),
+            [single] => println!("  Single: {}", single),
+            [first, second] => println!("  Pair: {}, {}", first, second),
+            [first, .., last] => println!("  First: {}, Last: {}, len >= 3", first, last),
+            [first, second, third, ..] => println!("  First three: {}, {}, {}", first, second, third),
+        }
+    }
+
+    analyze_slice(&[])
+    analyze_slice(&[1])
+    analyze_slice(&[1, 2])
+    analyze_slice(&[1, 2, 3])
+    analyze_slice(&[1, 2, 3, 4, 5])
+
+    // ===== PATTERN MATCHING ON BOX/TUPLE =====
+    println!("\n--- Box and Tuple Patterns ---")
+
+    let boxed = Box::new((1, 2, 3))
+
+    match boxed {
+        Box::new((a, b, c)) => println!("  Boxed tuple: {}, {}, {}", a, b, c),
+    }
+
+    // Nested box
+    let nested = Box::new(Box::new(42))
+    match nested {
+        Box::new(Box::new(val)) => println!("  Nested box: {}", val),
+    }
+
+    // ===== MATCH ON RESULT/OPTION =====
+    println!("\n--- Match on Result/Option ---")
+
+    let results = vec![Ok(1), Err("fail"), Ok(3)]
+
+    for result in results {
+        match result {
+            Ok(val) => println!("  Ok: {}", val),
+            Err(e) => println!("  Err: {}", e),
+        }
+    }
+
+    // Using if let for single case
+    let opt = Some(42)
+    if let Some(x) = opt {
+        println!("  If let: {}", x)
+    }
+
+    // While let for iteration
+    let mut stack = vec![1, 2, 3]
+    while let Some(top) = stack.pop() {
+        println!("  While let: {}", top)
+    }
+
+    // ===== REFUTABILITY =====
+    println!("\n--- Refutability ---")
+
+    // Irrefutable patterns (always match): let, function params, for loops
+    let (x, y) = (1, 2)  // Always matches
+    println!("  Irrefutable: x={}, y={}", x, y)
+
+    // Refutable patterns (may not match): match arms, if let, while let
+    let opt = Some(42)
+    if let Some(x) = opt {  // Refutable
+        println!("  Refutable matched: {}", x)
+    }
+
+    // Function parameter patterns
+    fn takes_tuple((a, b): (i32, i32)) {
+        println!("  Param pattern: {}, {}", a, b)
+    }
+    takes_tuple((10, 20))
+
+    // ===== PATTERN MATCHING WITH GENERICS =====
+    println!("\n--- Patterns with Generics ---")
+
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+
+    fn handle_result<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<T> {
+        match result {
+            Ok(val) => Some(val),
+            Err(e) => {
+                println!("  Error: {:?}", e)
+                None
+            }
+        }
+    }
+
+    println!("  Ok: {:?}", handle_result(Ok(42)))
+    println!("  Err: {:?}", handle_result(Err("failed")))
+
+    // ===== RECURSIVE PATTERNS =====
+    println!("\n--- Recursive Patterns ---")
+
+    #[derive(Debug)]
+    enum Expr {
+        Num(i32),
+        Add(Box<Expr>, Box<Expr>),
+        Mul(Box<Expr>, Box<Expr>),
+    }
+
+    fn eval(expr: &Expr) -> i32 {
+        match expr {
+            Expr::Num(n) => *n,
+            Expr::Add(l, r) => eval(l) + eval(r),
+            Expr::Mul(l, r) => eval(l) * eval(r),
+        }
+    }
+
+    let expr = Expr::Add(
+        Box::new(Expr::Num(2)),
+        Box::new(Expr::Mul(
+            Box::new(Expr::Num(3)),
+            Box::new(Expr::Num(4)),
+        )),
+    )
+
+    println!("  Expression: {:?}", expr)
+    println!("  Evaluated: {}", eval(&expr))
+
+    // Pattern matching to transform
+    fn simplify(expr: Expr) -> Expr {
+        match expr {
+            Expr::Add(l, r) => {
+                let l = simplify(*l)
+                let r = simplify(*r)
+                match (&l, &r) {
+                    (Expr::Num(0), _) => r,
+                    (_, Expr::Num(0)) => l,
+                    _ => Expr::Add(Box::new(l), Box::new(r)),
+                }
+            }
+            Expr::Mul(l, r) => {
+                let l = simplify(*l)
+                let r = simplify(*r)
+                match (&l, &r) {
+                    (Expr::Num(1), _) => r,
+                    (_, Expr::Num(1)) => l,
+                    (Expr::Num(0), _) | (_, Expr::Num(0)) => Expr::Num(0),
+                    _ => Expr::Mul(Box::new(l), Box::new(r)),
+                }
+            }
+            other => other,
+        }
+    }
+
+    let expr = Expr::Add(
+        Box::new(Expr::Num(0)),
+        Box::new(Expr::Num(42)),
+    )
+    let simplified = simplify(expr)
+    println!("  Simplified: {:?}", simplified)
+
+    // ===== PATTERN MATCHING IN CLOSURES =====
+    println!("\n--- Patterns in Closures ---")
+
+    let pairs = vec![(1, 2), (3, 4), (5, 6)]
+
+    let sum: i32 = pairs.iter()
+        .map(|&(a, b)| a + b)
+        .sum()
+
+    println!("  Sum of pairs: {}", sum)
+
+    // Match in closure
+    let categorize = |x: i32| match x {
+        n if n < 0 => "negative",
+        0 => "zero",
+        n if n > 0 => "positive",
+    };
+
+    println!("  -5: {}", categorize(-5))
+    println!("  0: {}", categorize(0))
+    println!("  10: {}", categorize(10))
+
+    // ===== TYPE ASCRIPTION IN PATTERNS =====
+    println!("\n--- Type Ascription ---")
+
+    let value: i32 = 42
+
+    match value {
+        val @ 0..=100 => println!("  Small: {}", val),
+        val => println!("  Large: {}", val),
+    }
+
+    // ===== PATTERN MATCHING ON TRAITS =====
+    println!("\n--- Matching on Trait Objects ---")
+
+    trait Animal {
+        fn sound(&self) -> &'static str;
+    }
+
+    struct Dog;
+    struct Cat;
+
+    impl Animal for Dog { fn sound(&self) -> &'static str { "Woof" } }
+    impl Animal for Cat { fn sound(&self) -> &'static str { "Meow" } }
+
+    fn make_sound(animal: &dyn Animal) {
+        match animal.sound() {
+            "Woof" => println!("  Dog says Woof"),
+            "Meow" => println!("  Cat says Meow"),
+            _ => println!("  Unknown animal"),
+        }
+    }
+
+    make_sound(&Dog)
+    make_sound(&Cat)
+
+    // ===== MATCH ERGONOMICS (RFC 2005) =====
+    println!("\n--- Match Ergonomics ---")
+
+    let opt_ref = &Some(String::from("hello"))
+
+    match opt_ref {
+        Some(s) => println!("  Auto-deref: {}", s),  // s is &String
+        None => {}
+    }
+
+    // Equivalent to:
+    match opt_ref {
+        Some(ref s) => println!("  Explicit ref: {}", s),
+        None => {}
+    }
+
+    // Mutable reference
+    let mut opt_mut = Some(String::from("world"))
+    match &mut opt_mut {
+        Some(s) => {
+            s.push_str("!")
+            println!("  Mut: {}", s)
+        }
+        None => {}
+    }
+
+    println!("\n✅ Advanced Pattern Matching example completed!")
+}

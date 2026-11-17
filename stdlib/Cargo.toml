@@ -9,7 +9,7 @@ repository = "https://github.com/samprit-web/NOVA"
 
 [dependencies]
 # Core
-nova-compiler = { path = "../compiler", features = ["full"] }
+nova-compiler = { path = "../compiler", features = ["parser"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 parking_lot = { workspace = true }
@@ -50,7 +50,7 @@ rsa = "0.9"
 pem = "1.0"
 der = "0.7"
 x509-parser = "0.16"
-rustls = { version = "0.23", features = ["std", "tls12", "tls13", "quic"] }
+rustls = { version = "0.23", features = ["std"] }
 ring = "0.17"
 webpki = "0.22"
 

@@ -1,0 +1,293 @@
+// Example 1: Generic Types
+// Demonstrates: generic structs, enums, functions, constraints, multiple type parameters
+
+fn main() {
+    println!("=== Generic Types ===\n")
+
+    // ===== GENERIC STRUCTS =====
+    println!("--- Generic Structs ---")
+
+    struct Pair<T, U> {
+        first: T,
+        second: U,
+    }
+
+    impl<T, U> Pair<T, U> {
+        fn new(first: T, second: U) -> Self {
+            Pair { first, second }
+        }
+
+        fn swap(self) -> Pair<U, T> {
+            Pair { first: self.second, second: self.first }
+        }
+
+        fn first(&self) -> &T {
+            &self.first
+        }
+
+        fn second(&self) -> &U {
+            &self.second
+        }
+    }
+
+    let pair = Pair::new(42, "hello")
+    println!("  Pair: ({}, {})", pair.first, pair.second)
+    println!("  First: {}, Second: {}", pair.first(), pair.second())
+
+    let swapped = pair.swap()
+    println!("  Swapped: ({}, {})", swapped.first, swapped.second)
+
+    // ===== GENERIC ENUMS =====
+    println!("\n--- Generic Enums ---")
+
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+
+    impl<T, E> Result<T, E> {
+        fn is_ok(&self) -> bool {
+            matches!(self, Result::Ok(_))
+        }
+
+        fn is_err(&self) -> bool {
+            matches!(self, Result::Err(_))
+        }
+
+        fn unwrap(self) -> T {
+            match self {
+                Result::Ok(v) => v,
+                Result::Err(_) => panic!("unwrap on Err"),
+            }
+        }
+
+        fn unwrap_err(self) -> E {
+            match self {
+                Result::Ok(_) => panic!("unwrap_err on Ok"),
+                Result::Err(e) => e,
+            }
+        }
+
+        fn map<U, F>(self, f: F) -> Result<U, E>
+        where F: FnOnce(T) -> U {
+            match self {
+                Result::Ok(v) => Result::Ok(f(v)),
+                Result::Err(e) => Result::Err(e),
+            }
+        }
+    }
+
+    let ok: Result<i32, &str> = Result::Ok(42)
+    let err: Result<i32, &str> = Result::Err("error")
+
+    println!("  Ok is_ok: {}", ok.is_ok())
+    println!("  Err is_ok: {}", err.is_ok())
+    println!("  Ok map: {:?}", ok.map(|x| x * 2))
+
+    // ===== GENERIC FUNCTIONS =====
+    println!("\n--- Generic Functions ---")
+
+    fn identity<T>(value: T) -> T {
+        value
+    }
+
+    println!("  identity(42): {}", identity(42))
+    println!("  identity(\"hello\"): {}", identity("hello"))
+    println!("  identity(3.14): {}", identity(3.14f64))
+
+    fn swap<T, U>(a: T, b: U) -> (U, T) {
+        (b, a)
+    }
+
+    let (s, i) = swap("hello", 42)
+    println!("  swap: ({}, {})", s, i)
+
+    // Multiple type parameters
+    fn combine<T, U, V>(a: T, b: U, f: fn(T, U) -> V) -> V {
+        f(a, b)
+    }
+
+    fn add_str_int(s: &str, n: i32) -> String {
+        format!("{}{}", s, n)
+    }
+
+    println!("  combine: {}", combine("value: ", 42, add_str_int))
+
+    // ===== TRAIT BOUNDS =====
+    println!("\n--- Trait Bounds ---")
+
+    use std::fmt::Display
+
+    fn print_twice<T: Display>(value: T) {
+        println!("  {} {}", value, value)
+    }
+
+    print_twice(42)
+    print_twice("hello")
+    print_twice(3.14)
+
+    // Multiple bounds
+    fn compare_and_print<T: PartialOrd + Display>(a: T, b: T) {
+        if a > b {
+            println!("  {} > {}", a, b)
+        } else {
+            println!("  {} <= {}", a, b)
+        }
+    }
+
+    compare_and_print(10, 5)
+    compare_and_print("apple", "banana")
+
+    // Where clause
+    fn process<T>(item: T)
+    where T: Display + Clone + Send + Sync + 'static {
+        println!("  Processing: {}", item)
+    }
+
+    process(100)
+    process("test".to_string())
+
+    // ===== GENERIC METHODS ON NON-GENERIC TYPES =====
+    println!("\n--- Generic Methods ---")
+
+    struct Container {
+        data: Vec<u8>,
+    }
+
+    impl Container {
+        fn new() -> Self {
+            Container { data: Vec::new() }
+        }
+
+        fn push<T: Into<Vec<u8>>>(&mut self, item: T) {
+            self.data.extend(item.into())
+        }
+
+        fn get_as<T>(&self) -> Option<T>
+        where T: TryFrom<Vec<u8>>, T::Error: std::fmt::Debug {
+            T::try_from(self.data.clone()).ok()
+        }
+    }
+
+    let mut container = Container::new()
+    container.push(b"hello")
+    container.push(vec![1, 2, 3])
+    println!("  Container data len: {}", container.data.len())
+
+    // ===== CONST GENERICS =====
+    println!("\n--- Const Generics ---")
+
+    struct Array<T, const N: usize> {
+        data: [T; N],
+    }
+
+    impl<T, const N: usize> Array<T, N> {
+        fn new(data: [T; N]) -> Self {
+            Array { data }
+        }
+
+        fn len(&self) -> usize {
+            N
+        }
+
+        fn get(&self, index: usize) -> Option<&T> {
+            if index < N { Some(&self.data[index]) } else { None }
+        }
+
+        fn iter(&self) -> std::slice::Iter<T> {
+            self.data.iter()
+        }
+    }
+
+    let arr = Array::new([1, 2, 3, 4, 5])
+    println!("  Array len: {}", arr.len())
+    println!("  Array[2]: {:?}", arr.get(2))
+    println!("  Array iter: {:?}", arr.iter().collect::<Vec<_>>())
+
+    // Matrix with const generics
+    struct Matrix<T, const ROWS: usize, const COLS: usize> {
+        data: [[T; COLS]; ROWS],
+    }
+
+    impl<T, const ROWS: usize, const COLS: usize> Matrix<T, ROWS, COLS> {
+        fn new(data: [[T; COLS]; ROWS]) -> Self {
+            Matrix { data }
+        }
+
+        fn get(&self, row: usize, col: usize) -> Option<&T> {
+            if row < ROWS && col < COLS { Some(&self.data[row][col]) } else { None }
+        }
+    }
+
+    let mat = Matrix::new([[1, 2], [3, 4], [5, 6]])
+    println!("  Matrix[1][1]: {:?}", mat.get(1, 1))
+
+    // ===== GENERIC TRAITS =====
+    println!("\n--- Generic Traits ---")
+
+    trait Convert<T> {
+        fn convert(&self) -> T;
+    }
+
+    impl Convert<String> for i32 {
+        fn convert(&self) -> String {
+            self.to_string()
+        }
+    }
+
+    impl Convert<i32> for String {
+        fn convert(&self) -> i32 {
+            self.parse().unwrap_or(0)
+        }
+    }
+
+    let num = 42
+    let str_num = num.convert()
+    println!("  i32 to String: {}", str_num)
+
+    let back: i32 = str_num.convert()
+    println!("  String to i32: {}", back)
+
+    // ===== PHANTOM DATA =====
+    println!("\n--- PhantomData ---")
+
+    use std::marker::PhantomData
+
+    struct Invariant<T> {
+        value: T,
+        _marker: PhantomData<*mut T>,  // Makes it invariant
+    }
+
+    struct Covariant<T> {
+        value: T,
+        _marker: PhantomData<T>,  // Covariant
+    }
+
+    struct Contravariant<T> {
+        _marker: PhantomData<fn(T)>,  // Contravariant
+    }
+
+    println!("  PhantomData examples defined")
+
+    // ===== DEFAULT TYPE PARAMETERS =====
+    println!("\n--- Default Type Parameters ---")
+
+    struct Wrapper<T, E = String> {
+        value: T,
+        error: E,
+    }
+
+    impl<T> Wrapper<T, String> {
+        fn new(value: T) -> Self {
+            Wrapper { value, error: String::new() }
+        }
+    }
+
+    let w1 = Wrapper::new(42)
+    println!("  Default error type: {:?}", w1.error)
+
+    let w2: Wrapper<i32, &str> = Wrapper { value: 10, error: "custom" }
+    println!("  Custom error type: {:?}", w2.error)
+
+    println!("\n✅ Generic Types example completed!")
+}

@@ -1,0 +1,147 @@
+// Example 1: Function Basics
+// Demonstrates: fn, parameters, return values, implicit returns, multiple parameters
+
+fn main() {
+    println!("=== Function Basics ===\n")
+
+    // ===== SIMPLE FUNCTION =====
+    fn greet() {
+        println!("Hello from greet()!")
+    }
+    greet()
+
+    // ===== FUNCTION WITH PARAMETERS =====
+    fn greet_name(name: &str) {
+        println!("Hello, {}!", name)
+    }
+    greet_name("NOVA")
+    greet_name("World")
+
+    // ===== FUNCTION WITH RETURN VALUE =====
+    fn add(a: i32, b: i32) -> i32 {
+        a + b  // implicit return (no semicolon)
+    }
+    println!("add(10, 20) = {}", add(10, 20))
+
+    // ===== EXPLICIT RETURN =====
+    fn subtract(a: i32, b: i32) -> i32 {
+        return a - b;  // explicit return with semicolon
+    }
+    println!("subtract(20, 8) = {}", subtract(20, 8))
+
+    // ===== MULTIPLE PARAMETERS =====
+    fn multiply(a: i32, b: i32, c: i32) -> i32 {
+        a * b * c
+    }
+    println!("multiply(2, 3, 4) = {}", multiply(2, 3, 4))
+
+    // ===== NO RETURN VALUE (unit type) =====
+    fn print_sum(a: i32, b: i32) {
+        let sum = a + b
+        println!("Sum: {} + {} = {}", a, b, sum)
+    }
+    print_sum(5, 7)
+
+    // ===== FUNCTION WITH MUTABLE PARAMETER =====
+    fn increment(mut x: i32) -> i32 {
+        x += 1
+        x
+    }
+    let val = 5
+    println!("increment({}) = {}", val, increment(val))
+    println!("Original unchanged: {}", val)
+
+    // ===== FUNCTION AS EXPRESSION =====
+    let add_fn = |a: i32, b: i32| -> i32 { a + b };  // closure (covered later)
+    println!("Closure add_fn(3, 4) = {}", add_fn(3, 4))
+
+    // ===== UNIT RETURN (implicit) =====
+    fn do_something() {
+        println!("  Doing something...")
+        // implicitly returns ()
+    }
+    let result = do_something()
+    println!("Unit return type: {:?}", result)
+
+    // ===== CONST FUNCTIONS (compile-time evaluation) =====
+    const fn square(x: i32) -> i32 {
+        x * x
+    }
+    const SQUARE_OF_5: i32 = square(5)
+    println!("const fn square(5) = {}", SQUARE_OF_5)
+
+    // ===== ASYNC FUNCTIONS =====
+    async fn fetch_data() -> String {
+        "data from async".to_string()
+    }
+    println!("Async function defined (use .await to call)")
+
+    // ===== UNSAFE FUNCTIONS =====
+    unsafe fn dangerous_operation(ptr: *const i32) -> i32 {
+        *ptr  // deref raw pointer
+    }
+    println!("Unsafe function defined (requires unsafe block)")
+
+    // ===== GENERIC FUNCTIONS =====
+    fn identity<T>(value: T) -> T {
+        value
+    }
+    println!("identity(42) = {}", identity(42))
+    println!("identity(\"hello\") = {}", identity("hello"))
+    println!("identity(3.14) = {}", identity(3.14f64))
+
+    // ===== FUNCTION WITH WHERE CLAUSE =====
+    fn compare_and_print<T: PartialOrd + std::fmt::Display>(a: T, b: T) {
+        if a > b {
+            println!("{} > {}", a, b)
+        } else {
+            println!("{} <= {}", a, b)
+        }
+    }
+    compare_and_print(10, 5)
+    compare_and_print("apple", "banana")
+
+    // ===== VARIADIC (not directly supported, use slices) =====
+    fn sum_all(numbers: &[i32]) -> i32 {
+        numbers.iter().sum()
+    }
+    println!("sum_all([1,2,3,4,5]) = {}", sum_all(&[1,2,3,4,5]))
+
+    // ===== FUNCTION POINTERS =====
+    fn apply_twice(f: fn(i32) -> i32, x: i32) -> i32 {
+        f(f(x))
+    }
+    fn double(x: i32) -> i32 { x * 2 }
+    println!("apply_twice(double, 3) = {}", apply_twice(double, 3))
+
+    // ===== METHODS (associated functions) =====
+    struct Calculator {
+        value: i32,
+    }
+
+    impl Calculator {
+        fn new() -> Self {
+            Calculator { value: 0 }
+        }
+
+        fn add(&mut self, x: i32) {
+            self.value += x
+        }
+
+        fn get(&self) -> i32 {
+            self.value
+        }
+
+        // Associated function (no self)
+        fn default() -> Self {
+            Calculator::new()
+        }
+    }
+
+    let mut calc = Calculator::new()
+    calc.add(10)
+    calc.add(20)
+    println!("Calculator value: {}", calc.get())
+
+    println!("\n✅ Function Basics example completed!")
+}

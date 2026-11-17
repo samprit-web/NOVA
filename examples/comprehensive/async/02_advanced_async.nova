@@ -1,0 +1,352 @@
+// Example 2: Advanced Async Patterns
+// Demonstrates: custom executors, async traits, pin, async generators, cancellation
+
+fn main() {
+    println!("=== Advanced Async ===\n")
+
+    use std::future::Future
+    use std::pin::Pin
+    use std::task::{Context, Poll, Wake, Waker}
+    use std::sync::{Arc, Mutex, Condvar}
+    use std::time::Duration
+    use std::collections::VecDeque
+
+    // ===== CUSTOM EXECUTOR =====
+    println!("--- Custom Executor ---")
+
+    struct Task {
+        future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    }
+
+    struct Executor {
+        ready_queue: Arc<Mutex<VecDeque<Task>>>,
+    }
+
+    impl Executor {
+        fn new() -> Self {
+            Executor { ready_queue: Arc::new(Mutex::new(VecDeque::new())) }
+        }
+
+        fn spawn<F>(&self, future: F)
+        where F: Future<Output = ()> + Send + 'static {
+            self.ready_queue.lock().unwrap().push_back(Task {
+                future: Box::pin(future),
+            })
+        }
+
+        fn run(&self) {
+            while let Some(mut task) = self.ready_queue.lock().unwrap().pop_front() {
+                let waker = noop_waker()
+                let mut cx = Context::from_waker(&waker)
+                match task.future.as_mut().poll(&mut cx) {
+                    Poll::Ready(()) => {}
+                    Poll::Pending => {
+                        self.ready_queue.lock().unwrap().push_back(task)
+                    }
+                }
+            }
+        }
+    }
+
+    fn noop_waker() -> Waker {
+        use std::task::{RawWaker, RawWakerVTable}
+        fn clone(_: *const ()) -> RawWaker { RawWaker::new(std::ptr::null(), &VTABLE) }
+        fn wake(_: *const ()) {}
+        fn wake_by_ref(_: *const ()) {}
+        fn drop(_: *const ()) {}
+        const VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+        unsafe { Waker::from_raw(clone(std::ptr::null())) }
+    }
+
+    let executor = Executor::new()
+    executor.spawn(async {
+        println!("  Task 1 started")
+        std::task::sleep(Duration::from_millis(10)).await
+        println!("  Task 1 done")
+    })
+    executor.spawn(async {
+        println!("  Task 2 started")
+        std::task::sleep(Duration::from_millis(20)).await
+        println!("  Task 2 done")
+    })
+    executor.run()
+
+    // ===== ASYNC TRAITS =====
+    println!("\n--- Async Traits ---")
+
+    #[async_trait::async_trait]
+    trait AsyncDatabase {
+        async fn connect(&self) -> Result<(), String>;
+        async fn query(&self, sql: &str) -> Result<Vec<String>, String>;
+        async fn close(&self) -> Result<(), String>;
+    }
+
+    struct MockDatabase {
+        connected: Mutex<bool>,
+    }
+
+    #[async_trait::async_trait]
+    impl AsyncDatabase for MockDatabase {
+        async fn connect(&self) -> Result<(), String> {
+            std::task::sleep(Duration::from_millis(10)).await
+            *self.connected.lock().unwrap() = true
+            Ok(())
+        }
+
+        async fn query(&self, sql: &str) -> Result<Vec<String>, String> {
+            if !*self.connected.lock().unwrap() {
+                return Err("Not connected".to_string())
+            }
+            std::task::sleep(Duration::from_millis(5)).await
+            Ok(vec![format!("Result for: {}", sql)])
+        }
+
+        async fn close(&self) -> Result<(), String> {
+            *self.connected.lock().unwrap() = false
+            Ok(())
+        }
+    }
+
+    std::task::block_on(async {
+        let db = MockDatabase { connected: Mutex::new(false) }
+        db.connect().await.unwrap()
+        let results = db.query("SELECT * FROM users").await.unwrap()
+        println!("  Query results: {:?}", results)
+        db.close().await.unwrap()
+    })
+
+    // ===== PIN AND UNPIN =====
+    println!("\n--- Pin and Unpin ---")
+
+    use std::pin::Pin
+    use std::marker::PhantomPinned
+
+    // Self-referential struct (cannot be moved after pinning)
+    #[derive(Debug)]
+    struct SelfRef {
+        data: String,
+        data_ptr: *const String,
+        _pin: PhantomPinned,
+    }
+
+    impl SelfRef {
+        fn new(data: String) -> Pin<Box<SelfRef>> {
+            let mut boxed = Box::pin(SelfRef {
+                data,
+                data_ptr: std::ptr::null(),
+                _pin: PhantomPinned,
+            })
+            // Safe because we're pinned and won't move
+            let ptr = &boxed.data as *const String
+            unsafe { boxed.as_mut().get_unchecked_mut().data_ptr = ptr }
+            boxed
+        }
+
+        fn print(&self) {
+            println!("  Data: {}", self.data)
+            unsafe { println!("  Ptr data: {}", *self.data_ptr) }
+        }
+    }
+
+    let pinned = SelfRef::new("Hello, Pin!".to_string())
+    pinned.print()
+
+    // ===== ASYNC GENERATORS (STREAMS) =====
+    println!("\n--- Async Generators ---")
+
+    use std::task::stream::{Stream, StreamExt}
+
+    // Manual stream implementation
+    struct CountStream {
+        current: u32,
+        max: u32,
+    }
+
+    impl Stream for CountStream {
+        type Item = u32
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+            if self.current >= self.max {
+                Poll::Ready(None)
+            } else {
+                let val = self.current
+                self.current += 1
+                Poll::Ready(Some(val))
+            }
+        }
+    }
+
+    std::task::block_on(async {
+        let stream = CountStream { current: 0, max: 5 }
+        let values: Vec<u32> = stream.collect().await
+        println!("  CountStream: {:?}", values)
+    })
+
+    // Async generator using async block
+    async fn generate_numbers(max: u32) -> impl Stream<Item = u32> {
+        let nums: Vec<u32> = (0..max).collect()
+        std::task::stream::iter(nums)
+    }
+
+    std::task::block_on(async {
+        let stream = generate_numbers(5).await
+        let values: Vec<u32> = stream.map(|x| x * 10).collect().await
+        println!("  Generated: {:?}", values)
+    })
+
+    // ===== CANCELLATION =====
+    println!("\n--- Cancellation ---")
+
+    use std::task::CancellationToken
+
+    async fn long_running(token: CancellationToken) {
+        for i in 1..=10 {
+            if token.is_cancelled() {
+                println!("  Task cancelled at step {}", i)
+                return
+            }
+            println!("  Step {}", i)
+            std::task::sleep(Duration::from_millis(50)).await
+        }
+        println!("  Task completed")
+    }
+
+    std::task::block_on(async {
+        let token = CancellationToken::new()
+        let token2 = token.clone()
+
+        let handle = std::task::spawn(long_running(token2))
+
+        std::task::sleep(Duration::from_millis(150)).await
+        println!("  Requesting cancellation...")
+        token.cancel()
+
+        handle.await
+    })
+
+    // ===== ASYNC MUTEX AND RWLOCK =====
+    println!("\n--- Async Mutex/RwLock ---")
+
+    use std::sync::Arc
+    use std::task::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock}
+
+    async fn mutex_example() {
+        let data = Arc::new(AsyncMutex::new(vec![1, 2, 3]))
+        let mut handles = vec![]
+
+        for i in 0..3 {
+            let data = Arc::clone(&data)
+            handles.push(std::task::spawn(async move {
+                let mut guard = data.lock().await
+                guard.push(i * 10)
+                println!("  Task {} added {}", i, i * 10)
+            }))
+        }
+
+        for h in handles { h.await }
+        println!("  Final: {:?}", *data.lock().await)
+    }
+
+    std::task::block_on(mutex_example())
+
+    // ===== ASYNC CHANNELS =====
+    println!("\n--- Async Channels ---")
+
+    use std::task::sync::mpsc
+
+    async fn channel_example() {
+        let (tx, mut rx) = mpsc::channel(10)
+
+        let sender = std::task::spawn(async move {
+            for i in 0..5 {
+                tx.send(i).await.unwrap()
+                println!("  Sent: {}", i)
+                std::task::sleep(Duration::from_millis(20)).await
+            }
+        })
+
+        let receiver = std::task::spawn(async move {
+            while let Some(val) = rx.recv().await {
+                println!("  Received: {}", val)
+            }
+        })
+
+        sender.await
+        receiver.await
+    }
+
+    std::task::block_on(channel_example())
+
+    // ===== SELECT WITH FUTURES =====
+    println!("\n--- Select Macro ---")
+
+    async fn select_example() {
+        let fut1 = async {
+            std::task::sleep(Duration::from_millis(100)).await
+            1
+        };
+
+        let fut2 = async {
+            std::task::sleep(Duration::from_millis(50)).await
+            2
+        };
+
+        // Using select! (pseudo-code, actual macro would be provided by runtime)
+        let result = std::task::select(fut1, fut2).await
+        println!("  First completed: {}", result)
+    }
+
+    std::task::block_on(select_example())
+
+    // ===== ASYNC MAIN PATTERNS =====
+    println!("\n--- Async Main Patterns ---")
+
+    // Pattern: Initialize async runtime
+    async fn init_app() -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize resources
+        println!("  Initializing database...")
+        std::task::sleep(Duration::from_millis(10)).await
+
+        println!("  Starting server...")
+        std::task::sleep(Duration::from_millis(10)).await
+
+        // Run server
+        println!("  Server running!")
+        Ok(())
+    }
+
+    std::task::block_on(init_app()).unwrap()
+
+    // Pattern: Graceful shutdown
+    async fn graceful_shutdown() {
+        let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1)
+
+        let server = std::task::spawn(async move {
+            println!("  Server started")
+            shutdown_rx.recv().await
+            println!("  Server shutting down gracefully...")
+        })
+
+        // Simulate running
+        std::task::sleep(Duration::from_millis(50)).await
+
+        // Shutdown
+        shutdown_tx.send(()).await.unwrap()
+        server.await
+    }
+
+    std::task::block_on(graceful_shutdown())
+
+    println!("\n✅ Advanced Async example completed!")
+}
+
+// Note: async_trait is a crate, here we simulate it
+mod async_trait {
+    pub use async_trait_macro::async_trait;
+}
+
+mod async_trait_macro {
+    pub macro async_trait($($item:tt)*) {
+        $($item)*
+    }
+}

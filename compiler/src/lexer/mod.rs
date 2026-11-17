@@ -7,10 +7,8 @@ use pest::Parser;
 use pest::iterators::Pair;
 
 use crate::{Session, Span, FileId, Diagnostic, Severity};
-
-#[derive(pest_derive::Parser)]
-#[grammar = "lexer/lexer.pest"]
-pub struct NovaParser;
+use crate::parser_gen::NovaParser;
+use crate::parser_gen::Rule;
 
 /// Token representation
 #[derive(Debug, Clone, PartialEq)]

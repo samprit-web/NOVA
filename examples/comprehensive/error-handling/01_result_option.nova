@@ -1,0 +1,254 @@
+// Example 1: Result and Option Types
+// Demonstrates: Result<T, E>, Option<T>, pattern matching, ? operator, combinators
+
+fn main() {
+    println!("=== Result & Option ===\n")
+
+    // ===== OPTION BASICS =====
+    println!("--- Option ---")
+
+    let some_value = Some(42)
+    let no_value: Option<i32> = None
+
+    println!("Some: {:?}", some_value)
+    println!("None: {:?}", no_value)
+
+    // Pattern matching on Option
+    match some_value {
+        Some(x) => println!("Got value: {}", x),
+        None => println!("No value"),
+    }
+
+    match no_value {
+        Some(x) => println!("Got value: {}", x),
+        None => println!("No value"),
+    }
+
+    // ===== OPTION COMBINATORS =====
+    println!("\n--- Option Combinators ---")
+
+    let opt = Some(10)
+
+    // map - transform if Some
+    let doubled = opt.map(|x| x * 2)
+    println!("map: {:?}", doubled)  // Some(20)
+
+    let none_opt: Option<i32> = None
+    let mapped_none = none_opt.map(|x| x * 2)
+    println!("map on None: {:?}", mapped_none)  // None
+
+    // and_then - chain operations returning Option
+    let opt_str = Some("42")
+    let parsed = opt_str.and_then(|s| s.parse::<i32>().ok())
+    println!("and_then parse: {:?}", parsed)  // Some(42)
+
+    let bad_str = Some("not a number")
+    let parsed_bad = bad_str.and_then(|s| s.parse::<i32>().ok())
+    println!("and_then bad parse: {:?}", parsed_bad)  // None
+
+    // filter - keep only if predicate matches
+    let filtered = Some(10).filter(|x| *x > 5)
+    println!("filter > 5: {:?}", filtered)  // Some(10)
+
+    let filtered_out = Some(3).filter(|x| *x > 5)
+    println!("filter > 5: {:?}", filtered_out)  // None
+
+    // or / or_else - provide default
+    let with_default = none_opt.or(Some(100))
+    println!("or: {:?}", with_default)  // Some(100)
+
+    let with_computed = none_opt.or_else(|| Some(200))
+    println!("or_else: {:?}", with_computed)  // Some(200)
+
+    // unwrap_or / unwrap_or_else - get value or default
+    println!("unwrap_or: {}", none_opt.unwrap_or(0))  // 0
+    println!("unwrap_or_else: {}", none_opt.unwrap_or_else(|| 42))  // 42
+
+    // unwrap / expect - panic if None (avoid in production)
+    // println!("{}", none_opt.unwrap())  // panics!
+    // println!("{}", none_opt.expect("Value required"))  // panics with message!
+
+    // ===== RESULT BASICS =====
+    println!("\n--- Result ---")
+
+    let ok: Result<i32, &str> = Ok(42)
+    let err: Result<i32, &str> = Err("Something went wrong")
+
+    println!("Ok: {:?}", ok)
+    println!("Err: {:?}", err)
+
+    // Pattern matching on Result
+    match ok {
+        Ok(value) => println!("Success: {}", value),
+        Err(e) => println!("Error: {}", e),
+    }
+
+    match err {
+        Ok(value) => println!("Success: {}", value),
+        Err(e) => println!("Error: {}", e),
+    }
+
+    // ===== RESULT COMBINATORS =====
+    println("\n--- Result Combinators ---")
+
+    let ok_val: Result<i32, &str> = Ok(10)
+    let err_val: Result<i32, &str> = Err("error")
+
+    // map - transform Ok value
+    let mapped_ok = ok_val.map(|x| x * 2)
+    println!("map Ok: {:?}", mapped_ok)  // Ok(20)
+
+    let mapped_err = err_val.map(|x| x * 2)
+    println!("map Err: {:?}", mapped_err)  // Err("error")
+
+    // map_err - transform Err value
+    let mapped_err2 = err_val.map_err(|e| format!("Custom: {}", e))
+    println!("map_err: {:?}", mapped_err2)  // Err("Custom: error")
+
+    // and_then - chain operations returning Result
+    fn divide(a: i32, b: i32) -> Result<i32, &str> {
+        if b == 0 { Err("Division by zero") } else { Ok(a / b) }
+    }
+
+    let chained = Ok(100).and_then(|x| divide(x, 2)).and_then(|x| divide(x, 5))
+    println!("and_then chain: {:?}", chained)  // Ok(10)
+
+    let chained_err = Ok(100).and_then(|x| divide(x, 0)).and_then(|x| divide(x, 5))
+    println!("and_then with error: {:?}", chained_err)  // Err("Division by zero")
+
+    // or_else - handle error with fallback
+    let fallback = err_val.or_else(|_| Ok(0))
+    println!("or_else: {:?}", fallback)  // Ok(0)
+
+    // unwrap_or / unwrap_or_else
+    println!("unwrap_or: {}", err_val.unwrap_or(42))  // 42
+    println!("unwrap_or_else: {}", err_val.unwrap_or_else(|e| e.len()))  // 5
+
+    // ===== ? OPERATOR =====
+    println!("\n--- ? Operator ---")
+
+    fn read_config() -> Result<String, std::io::Error> {
+        // Simulated file read
+        Ok(String::from("port=8080\nhost=localhost"))
+    }
+
+    fn parse_port(config: &str) -> Result<u16, &str> {
+        for line in config.lines() {
+            if line.starts_with("port=") {
+                let port_str = &line[5..]
+                return port_str.parse::<u16>().map_err(|_| "Invalid port")
+            }
+        }
+        Err("Port not found")
+    }
+
+    fn get_port() -> Result<u16, Box<dyn std::error::Error>> {
+        let config = read_config()?
+        let port = parse_port(&config)?
+        Ok(port)
+    }
+
+    match get_port() {
+        Ok(port) => println!("Port: {}", port),
+        Err(e) => println!("Error: {}", e),
+    }
+
+    // ===== TRY OPERATORS (Experimental) =====
+    // In stable NOVA, ? is the main operator
+    // try blocks can be used for complex logic
+
+    // ===== OPTION/RESULT CONVERSION =====
+    println!("\n--- Conversion ---")
+
+    let opt = Some(42)
+    let result: Result<i32, &str> = opt.ok_or("No value")
+    println!("Option to Result: {:?}", result)
+
+    let none: Option<i32> = None
+    let result2: Result<i32, &str> = none.ok_or("No value")
+    println!("None to Result: {:?}", result2)
+
+    let ok: Result<i32, &str> = Ok(42)
+    let opt2 = ok.ok()
+    println!("Result to Option: {:?}", opt2)
+
+    let err: Result<i32, &str> = Err("error")
+    let none2 = err.ok()
+    println!("Err to Option: {:?}", none2)
+
+    // ===== COLLECTING INTO RESULT/OPTION =====
+    println!("\n--- Collecting ---")
+
+    let results = vec![Ok(1), Ok(2), Ok(3)]
+    let collected: Result<Vec<i32>, &str> = results.into_iter().collect()
+    println!("All Ok: {:?}", collected)
+
+    let results_with_err = vec![Ok(1), Err("fail"), Ok(3)]
+    let collected2: Result<Vec<i32>, &str> = results_with_err.into_iter().collect()
+    println!("With Err: {:?}", collected2)
+
+    let options = vec![Some(1), Some(2), Some(3)]
+    let collected3: Option<Vec<i32>> = options.into_iter().collect()
+    println!("All Some: {:?}", collected3)
+
+    // ===== CUSTOM ERROR TYPES =====
+    println!("\n--- Custom Errors ---")
+
+    #[derive(Debug)]
+    enum AppError {
+        NotFound,
+        PermissionDenied,
+        IoError(std::io::Error),
+    }
+
+    impl std::fmt::Display for AppError {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                AppError::NotFound => write!(f, "Not found"),
+                AppError::PermissionDenied => write!(f, "Permission denied"),
+                AppError::IoError(e) => write!(f, "IO error: {}", e),
+            }
+        }
+    }
+
+    impl std::error::Error for AppError {}
+
+    impl From<std::io::Error> for AppError {
+        fn from(e: std::io::Error) -> Self {
+            AppError::IoError(e)
+        }
+    }
+
+    fn find_user(id: u32) -> Result<String, AppError> {
+        if id == 0 {
+            Err(AppError::NotFound)
+        } else if id == 999 {
+            Err(AppError::PermissionDenied)
+        } else {
+            Ok(format!("User {}", id))
+        }
+    }
+
+    println!("find_user(1): {:?}", find_user(1))
+    println!("find_user(0): {:?}", find_user(0))
+    println!("find_user(999): {:?}", find_user(999))
+
+    // ===== ERROR CHAINING =====
+    println!("\n--- Error Chaining ---")
+
+    fn level1() -> Result<i32, AppError> {
+        Err(AppError::NotFound)
+    }
+
+    fn level2() -> Result<i32, AppError> {
+        level1()?  // propagates error
+    }
+
+    fn level3() -> Result<i32, AppError> {
+        level2()?  // propagates error
+    }
+
+    println!("Error chaining: {:?}", level3())
+
+    println!("\n✅ Result & Option example completed!")
+}

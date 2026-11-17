@@ -1,0 +1,292 @@
+// Example 1: Dependent Types
+// Demonstrates: type-level naturals, vectors with length, proofs, type-level computation
+
+fn main() {
+    println!("=== Dependent Types ===\n")
+
+    // ===== TYPE-LEVEL NATURALS =====
+    println!("--- Type-Level Naturals ---")
+
+    // Peano naturals at type level
+    trait Nat {
+        const VALUE: usize;
+    }
+
+    struct Zero;
+    struct Succ<N>(std::marker::PhantomData<N>);
+
+    impl Nat for Zero {
+        const VALUE: usize = 0;
+    }
+
+    impl<N: Nat> Nat for Succ<N> {
+        const VALUE: usize = N::VALUE + 1;
+    }
+
+    type One = Succ<Zero>;
+    type Two = Succ<One>;
+    type Three = Succ<Two>;
+    type Four = Succ<Three>;
+    type Five = Succ<Four>;
+
+    fn print_nat<N: Nat>() {
+        println!("  Nat: {}", N::VALUE)
+    }
+
+    print_nat::<Zero>()
+    print_nat::<One>()
+    print_nat::<Two>()
+    print_nat::<Three>()
+    print_nat::<Five>()
+
+    // ===== TYPE-LEVEL ARITHMETIC =====
+    println!("\n--- Type-Level Arithmetic ---")
+
+    trait Add<B> {
+        type Output: Nat;
+    }
+
+    impl<B: Nat> Add<B> for Zero {
+        type Output = B;
+    }
+
+    impl<N: Nat, B: Nat> Add<B> for Succ<N>
+    where N: Add<B>, <N as Add<B>>::Output: Nat {
+        type Output = Succ<<N as Add<B>>::Output>;
+    }
+
+    type Sum = <Two as Add<Three>>::Output;
+    println!("  Two + Three = {}", Sum::VALUE)
+
+    // ===== VECTORS WITH LENGTH =====
+    println!("\n--- Vectors with Length ---")
+
+    struct Vec<T, N: Nat> {
+        data: [T; N::VALUE],
+    }
+
+    impl<T, N: Nat> Vec<T, N> {
+        fn new(data: [T; N::VALUE]) -> Self {
+            Vec { data }
+        }
+
+        fn len(&self) -> usize {
+            N::VALUE
+        }
+
+        fn get(&self, index: usize) -> Option<&T> {
+            if index < N::VALUE { Some(&self.data[index]) } else { None }
+        }
+    }
+
+    // Concatenation preserves length
+    impl<T, N: Nat, M: Nat> Vec<T, N>
+    where
+        N: Add<M>,
+        <N as Add<M>>::Output: Nat,
+    {
+        fn concat<M: Nat>(self, other: Vec<T, M>) -> Vec<T, <N as Add<M>>::Output> {
+            let mut combined = Vec::new()
+            // In real implementation, would combine arrays
+            Vec { data: self.data } // Simplified
+        }
+    }
+
+    let v1: Vec<i32, Two> = Vec::new([1, 2])
+    let v2: Vec<i32, Three> = Vec::new([3, 4, 5])
+    println!("  v1 len: {}", v1.len())
+    println!("  v2 len: {}", v2.len())
+
+    // ===== MATRIX DIMENSIONS =====
+    println!("\n--- Matrix Dimensions ---")
+
+    struct Matrix<T, Rows: Nat, Cols: Nat> {
+        data: [[T; Cols::VALUE]; Rows::VALUE],
+    }
+
+    impl<T, R: Nat, C: Nat> Matrix<T, R, C> {
+        fn new(data: [[T; C::VALUE]; R::VALUE]) -> Self {
+            Matrix { data }
+        }
+
+        fn multiply<C2: Nat>(
+            self,
+            other: Matrix<T, C, C2>,
+        ) -> Matrix<T, R, C2>
+        where
+            T: Copy + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
+        {
+            let mut result = [[T::default(); C2::VALUE]; R::VALUE]
+            // Matrix multiplication
+            for i in 0..R::VALUE {
+                for j in 0..C2::VALUE {
+                    let mut sum = T::default()
+                    for k in 0..C::VALUE {
+                        sum = sum + self.data[i][k] * other.data[k][j]
+                    }
+                    result[i][j] = sum
+                }
+            }
+            Matrix::new(result)
+        }
+    }
+
+    type Mat2x3 = Matrix<f64, Two, Three>;
+    type Mat3x2 = Matrix<f64, Three, Two>;
+    type Mat2x2 = Matrix<f64, Two, Two>;
+
+    let m1 = Mat2x3::new([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    let m2 = Mat3x2::new([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    let m3: Mat2x2 = m1.multiply(m2)
+    println!("  Matrix multiply: 2x3 * 3x2 = 2x2")
+
+    // ===== FINITE SETS =====
+    println!("\n--- Finite Sets ---")
+
+    struct Fin<N: Nat> {
+        value: usize,
+        _phantom: std::marker::PhantomData<N>,
+    }
+
+    impl<N: Nat> Fin<N> {
+        fn new(value: usize) -> Option<Self> {
+            if value < N::VALUE {
+                Some(Fin { value, _phantom: std::marker::PhantomData })
+            } else {
+                None
+            }
+        }
+
+        fn get(&self) -> usize { self.value }
+    }
+
+    let f = Fin::<Five>::new(3)
+    println!("  Fin<5>::new(3) = {:?}", f.map(|x| x.get()))
+    let f = Fin::<Five>::new(10)
+    println!("  Fin<5>::new(10) = {:?}", f)
+
+    // ===== PROOFS =====
+    println!("\n--- Proofs ---")
+
+    // Equality proof
+    struct Eq<A, B> {
+        _phantom: std::marker::PhantomData<(A, B)>,
+    }
+
+    impl<A, B> Eq<A, B> {
+        fn new() -> Option<Self> {
+            // In real implementation, would check type equality
+            Some(Eq { _phantom: std::marker::PhantomData })
+        }
+    }
+
+    // Reflexivity
+    fn refl<A>() -> Eq<A, A> {
+        Eq { _phantom: std::marker::PhantomData }
+    }
+
+    // Symmetry
+    fn sym<A, B>(eq: Eq<A, B>) -> Eq<B, A> {
+        Eq { _phantom: std::marker::PhantomData }
+    }
+
+    // Transitivity
+    fn trans<A, B, C>(eq1: Eq<A, B>, eq2: Eq<B, C>) -> Eq<A, C> {
+        Eq { _phantom: std::marker::PhantomData }
+    }
+
+    let eq = refl::<i32>()
+    println!("  Reflexivity proof created")
+
+    // ===== PROPOSITIONS AS TYPES =====
+    println!("\n--- Propositions as Types ---")
+
+    // True proposition (unit type)
+    struct True;
+    // False proposition (empty type)
+    enum False {}
+
+    // Implication: A -> B
+    struct Impl<A, B>(fn(A) -> B);
+
+    // Conjunction: A ∧ B
+    struct And<A, B>(A, B);
+
+    // Disjunction: A ∨ B
+    enum Or<A, B> {
+        Left(A),
+        Right(B),
+    }
+
+    // Negation: ¬A = A -> False
+    type Not<A> = Impl<A, False>;
+
+    // Example: Double negation elimination (not provable constructively)
+    // fn dne<A>(not_not: Not<Not<A>>) -> A { ... }
+
+    println!("  Proposition types defined")
+
+    // ===== TYPE-LEVEL COMPUTATION =====
+    println!("\n--- Type-Level Computation ---")
+
+    // Fibonacci at type level
+    trait Fib {
+        const VALUE: usize;
+    }
+
+    impl Fib for Zero {
+        const VALUE: usize = 0;
+    }
+    impl Fib for One {
+        const VALUE: usize = 1;
+    }
+    impl<N: Nat> Fib for Succ<Succ<N>>
+    where
+        Succ<N>: Fib,
+        N: Fib,
+        <Succ<N> as Fib>::Output: Add<<N as Fib>::Output>,
+        <<Succ<N> as Fib>::Output as Add<<N as Fib>::Output>>::Output: Nat,
+    {
+        type Output = <<Succ<N> as Fib>::Output as Add<<N as Fib>::Output>>::Output;
+        const VALUE: usize = <Succ<N> as Fib>::VALUE + <N as Fib>::VALUE;
+    }
+
+    // Note: Full type-level Fib requires more machinery
+    println!("  Type-level computation pattern shown")
+
+    // ===== SIZED TYPES =====
+    println!("\n--- Sized Types ---")
+
+    // Array with size known at compile time
+    fn process_array<const N: usize>(arr: [i32; N]) -> i32 {
+        arr.iter().sum()
+    }
+
+    let arr = [1, 2, 3, 4, 5]
+    println!("  Sum: {}", process_array(arr))
+
+    // Function that requires specific size
+    fn needs_three<const N: usize>(arr: [i32; N])
+    where
+        std::array::LengthAtMost3<N>: std::marker::Sized,
+    {
+        println!("  Array of size <= 3")
+    }
+
+    needs_three([1, 2])
+    needs_three([1, 2, 3])
+    // needs_three([1, 2, 3, 4])  // Compile error
+
+    println!("\n✅ Dependent Types example completed!")
+}
+
+// Simplified LengthAtMost3
+mod std {
+    pub mod array {
+        pub struct LengthAtMost3<const N: usize>;
+        impl LengthAtMost3<0> {}
+        impl LengthAtMost3<1> {}
+        impl LengthAtMost3<2> {}
+        impl LengthAtMost3<3> {}
+    }
+}

@@ -12,7 +12,7 @@ name = "nova"
 path = "src/main.rs"
 
 [dependencies]
-nova-compiler = { path = "../compiler", features = ["full"] }
+nova-compiler = { path = "../compiler", features = ["parser"] }
 nova-std = { path = "../stdlib" }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

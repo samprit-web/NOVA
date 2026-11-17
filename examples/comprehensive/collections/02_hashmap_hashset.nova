@@ -1,0 +1,218 @@
+// Example 2: HashMap and HashSet
+// Demonstrates: HashMap, HashSet, BTreeMap, BTreeSet, common operations
+
+fn main() {
+    println!("=== HashMap & HashSet ===\n")
+
+    use std::collections::{HashMap, HashSet, BTreeMap, BTreeSet}
+
+    // ===== HASHMAP CREATION =====
+    // Empty HashMap
+    let mut map1: HashMap<String, i32> = HashMap::new()
+
+    // With initial capacity
+    let mut map2 = HashMap::with_capacity(10)
+
+    // Using macro (if available) or from iter
+    let map3: HashMap<_, _> = vec![
+        ("apple", 1),
+        ("banana", 2),
+        ("cherry", 3),
+    ].into_iter().collect()
+
+    println!("map1 (empty): {:?}", map1)
+    println!("map3: {:?}", map3)
+
+    // ===== INSERTING AND UPDATING =====
+    let mut scores = HashMap::new()
+
+    scores.insert(String::from("Alice"), 100)
+    scores.insert(String::from("Bob"), 85)
+    scores.insert(String::from("Charlie"), 92)
+
+    println!("\nAfter inserts: {:?}", scores)
+
+    // Update existing
+    scores.insert(String::from("Alice"), 110)
+    println!("After updating Alice: {:?}", scores)
+
+    // Or use entry API
+    scores.entry(String::from("David")).or_insert(75)
+    scores.entry(String::from("Alice")).or_insert(200)  // won't update
+    println!("After entry API: {:?}", scores)
+
+    // ===== ACCESSING VALUES =====
+    let alice_score = scores.get(&String::from("Alice"))
+    println!("\nAlice's score: {:?}", alice_score)
+
+    let missing = scores.get(&String::from("Eve"))
+    println!("Eve's score: {:?}", missing)
+
+    // Direct indexing (panics if missing)
+    // println!("{}", scores[&String::from("Eve")])  // would panic
+
+    // ===== REMOVING ENTRIES =====
+    let removed = scores.remove(&String::from("Bob"))
+    println!("\nRemoved Bob: {:?}", removed)
+    println!("Scores after remove: {:?}", scores)
+
+    // ===== ITERATION =====
+    println!("\n--- Iteration ---")
+
+    // Immutable references
+    for (name, score) in &scores {
+        println!("  {}: {}", name, score)
+    }
+
+    // Mutable references
+    for (name, score) in &mut scores {
+        *score += 5
+    }
+    println!("After +5 bonus: {:?}", scores)
+
+    // Consuming
+    for (name, score) in scores {
+        println!("  {}: {}", name, score)
+    }
+
+    // ===== COMMON METHODS =====
+    let mut map = HashMap::new()
+    map.insert("a", 1)
+    map.insert("b", 2)
+    map.insert("c", 3)
+
+    println!("\n--- Common Methods ---")
+    println!("len: {}", map.len())
+    println!("is_empty: {}", map.is_empty())
+    println!("contains_key 'a': {}", map.contains_key(&"a"))
+    println!("contains_key 'z': {}", map.contains_key(&"z"))
+
+    let keys: Vec<_> = map.keys().collect()
+    let values: Vec<_> = map.values().collect()
+    println!("keys: {:?}", keys)
+    println!("values: {:?}", values)
+
+    // ===== ENTRY API ADVANCED =====
+    println!("\n--- Entry API ---")
+    let mut freq = HashMap::new()
+
+    for word in ["apple", "banana", "apple", "cherry", "banana", "apple"] {
+        *freq.entry(word).or_insert(0) += 1
+    }
+    println!("Word frequencies: {:?}", freq)
+
+    // Entry with and_modify
+    let mut map = HashMap::from([("a", 1), ("b", 2)])
+    map.entry("a").and_modify(|v| *v += 10).or_insert(100)
+    map.entry("c").and_modify(|v| *v += 10).or_insert(100)
+    println!("Entry API: {:?}", map)
+
+    // ===== HASHSET =====
+    println!("\n--- HashSet ---")
+
+    let mut set = HashSet::new()
+    set.insert(1)
+    set.insert(2)
+    set.insert(3)
+    set.insert(2)  // duplicate ignored
+
+    println!("Set: {:?}", set)
+    println!("Contains 2: {}", set.contains(&2))
+    println!("Contains 5: {}", set.contains(&5))
+
+    set.remove(&2)
+    println!("After removing 2: {:?}", set)
+
+    // Set operations
+    let a: HashSet<_> = [1, 2, 3, 4].iter().cloned().collect()
+    let b: HashSet<_> = [3, 4, 5, 6].iter().cloned().collect()
+
+    println!("\nSet A: {:?}", a)
+    println!("Set B: {:?}", b)
+
+    // Union
+    let union: HashSet<_> = a.union(&b).cloned().collect()
+    println!("Union: {:?}", union)
+
+    // Intersection
+    let intersection: HashSet<_> = a.intersection(&b).cloned().collect()
+    println!("Intersection: {:?}", intersection)
+
+    // Difference (a - b)
+    let difference: HashSet<_> = a.difference(&b).cloned().collect()
+    println!("Difference (A - B): {:?}", difference)
+
+    // Symmetric difference
+    let sym_diff: HashSet<_> = a.symmetric_difference(&b).cloned().collect()
+    println!("Symmetric difference: {:?}", sym_diff)
+
+    // Subset / Superset
+    println!("A is subset of union: {}", a.is_subset(&union))
+    println!("A is superset of intersection: {}", a.is_superset(&intersection))
+    println!("A is disjoint from B: {}", a.is_disjoint(&b))
+
+    // ===== BTREE MAP (ORDERED) =====
+    println!("\n--- BTreeMap (Ordered) ---")
+    let mut btree = BTreeMap::new()
+    btree.insert("delta", 4)
+    btree.insert("alpha", 1)
+    btree.insert("epsilon", 5)
+    btree.insert("beta", 2)
+    btree.insert("gamma", 3)
+
+    println!("BTreeMap (sorted): {:?}", btree)
+
+    // Range queries
+    let range: Vec<_> = btree.range("beta".."epsilon").collect()
+    println!("Range beta..epsilon: {:?}", range)
+
+    // First and last
+    println!("First: {:?}", btree.first_key_value())
+    println!("Last: {:?}", btree.last_key_value())
+
+    // ===== BTREE SET (ORDERED) =====
+    println!("\n--- BTreeSet (Ordered) ---")
+    let mut bset = BTreeSet::new()
+    bset.insert(5)
+    bset.insert(1)
+    bset.insert(3)
+    bset.insert(4)
+    bset.insert(2)
+
+    println!("BTreeSet (sorted): {:?}", bset)
+
+    // Range
+    let range: Vec<_> = bset.range(2..5).cloned().collect()
+    println!("Range 2..5: {:?}", range)
+
+    // ===== CUSTOM KEY TYPES =====
+    println!("\n--- Custom Key Types ---")
+
+    #[derive(Debug, PartialEq, Eq, Hash, Clone)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    let mut point_map = HashMap::new()
+    point_map.insert(Point { x: 0, y: 0 }, "origin")
+    point_map.insert(Point { x: 1, y: 1 }, "diagonal")
+    point_map.insert(Point { x: -1, y: 2 }, "other")
+
+    println!("Point map: {:?}", point_map)
+    println!("Get (1,1): {:?}", point_map.get(&Point { x: 1, y: 1 }))
+
+    // ===== PERFORMANCE TIPS =====
+    println!("\n--- Performance Tips ---")
+    // Reserve capacity
+    let mut reserved = HashMap::with_capacity(1000)
+    println!("Reserved capacity: {}", reserved.capacity())
+
+    // Shrink to fit
+    let mut large = HashMap::new()
+    for i in 0..1000 { large.insert(i, i) }
+    large.shrink_to_fit()
+    println!("Shrunk capacity: {}", large.capacity())
+
+    println!("\n✅ HashMap & HashSet example completed!")
+}

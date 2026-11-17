@@ -1,0 +1,232 @@
+// Example 1: Effect System Basics
+// Demonstrates: effect declarations, handlers, effect polymorphism, scoped effects
+
+fn main() {
+    println!("=== Effect System Basics ===\n")
+
+    // ===== EFFECT DECLARATIONS =====
+    println!("--- Effect Declarations ---")
+
+    // Effects are like checked exceptions but composable
+    effect Console {
+        fn print(s: String) -> ();
+        fn read_line() -> String;
+    }
+
+    effect State<S> {
+        fn get() -> S;
+        fn set(s: S) -> ();
+    }
+
+    effect Async {
+        fn spawn<F: Future>(f: F) -> JoinHandle<F::Output>;
+        fn sleep(duration: Duration) -> ();
+    }
+
+    effect Exception<E> {
+        fn throw(e: E) -> !;
+    }
+
+    println!("  Effects declared: Console, State, Async, Exception")
+
+    // ===== USING EFFECTS =====
+    println!("\n--- Using Effects ---")
+
+    // Functions declare effects in their signature
+    fn greet(name: String) -> () with Console {
+        Console::print(format!("Hello, {}!", name))
+    }
+
+    fn counter() -> i32 with State<i32> {
+        let n = State::get()
+        State::set(n + 1)
+        n
+    }
+
+    fn fetch_data() -> String with Async + Console {
+        Async::sleep(Duration::from_millis(100))
+        Console::print("Fetching...".to_string())
+        "data".to_string()
+    }
+
+    println!("  Effectful functions declared")
+
+    // ===== EFFECT HANDLERS =====
+    println!("\n--- Effect Handlers ---")
+
+    // Handle Console with actual IO
+    handler ConsoleIO for Console {
+        fn print(s: String) -> () {
+            println!("{}", s)
+        }
+        fn read_line() -> String {
+            let mut buf = String::new()
+            std::io::stdin().read_line(&mut buf).unwrap()
+            buf.trim().to_string()
+        }
+    }
+
+    // Handle State with mutable reference
+    handler RefState<S> for State<S> {
+        fn get() -> S {
+            *self.0.borrow()
+        }
+        fn set(s: S) -> () {
+            *self.0.borrow_mut() = s
+        }
+    }
+
+    // Handle Exception with Result
+    handler ResultHandler<E> for Exception<E> {
+        fn throw(e: E) -> ! {
+            // Convert to Result
+            panic!("Exception: {:?}", e)
+        }
+    }
+
+    println!("  Handlers defined")
+
+    // ===== RUNNING WITH HANDLERS =====
+    println!("\n--- Running with Handlers ---")
+
+    // with handler { ... } syntax
+    let result = with ConsoleIO {
+        greet("World".to_string())
+    }
+    println!("  greet handled")
+
+    let state = std::cell::RefCell::new(0)
+    let result = with RefState(&state) {
+        counter()
+    }
+    println!("  Counter: {}", result)
+
+    // ===== EFFECT POLYMORPHISM =====
+    println!("\n--- Effect Polymorphism ---")
+
+    // Functions can be polymorphic over effects
+    fn map_with_effect<T, U, F>(items: Vec<T>, f: F) -> Vec<U>
+    where
+        F: Fn(T) -> U with E,
+        E: Effect,
+    {
+        items.into_iter().map(f).collect()
+    }
+
+    // Effect variables
+    fn log_and_process<T>(items: Vec<T>) -> Vec<String> with Console {
+        map_with_effect(items, |x| {
+            Console::print(format!("Processing: {:?}", x));
+            format!("{:?}", x)
+        })
+    }
+
+    println!("  Effect polymorphism shown")
+
+    // ===== SCOPED EFFECTS =====
+    println!("\n--- Scoped Effects ---")
+
+    // Effects can be locally scoped
+    fn with_logging<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R with Console,
+    {
+        with ConsoleIO {
+            Console::print("Starting...".to_string());
+            let result = f();
+            Console::print("Done.".to_string());
+            result
+        }
+    }
+
+    let result = with_logging(|| {
+        Console::print("Inside".to_string());
+        42
+    });
+    println!("  Scoped result: {}", result)
+
+    // ===== EFFECT COMPOSITION =====
+    println!("\n--- Effect Composition ---")
+
+    // Combine multiple effects
+    fn complex_operation() -> String with Console + State<i32> + Async {
+        let count = State::get()
+        Console::print(format!("Count: {}", count))
+        State::set(count + 1)
+        Async::sleep(Duration::from_millis(10))
+        "done".to_string()
+    }
+
+    // Handle multiple effects
+    let state = std::cell::RefCell::new(0)
+    let result = with ConsoleIO, RefState(&state), AsyncRuntime {
+        complex_operation()
+    }
+    println!("  Complex: {}", result)
+
+    // ===== EFFECT INFERENCE =====
+    println!("\n--- Effect Inference ---")
+
+    // Effects can often be inferred
+    fn inferred_effect() {
+        Console::print("Hello".to_string())  // Console inferred
+    }
+
+    // Explicit annotation when needed
+    fn explicit_effect() -> () with Console {
+        Console::print("Explicit".to_string())
+    }
+
+    println!("  Effect inference shown")
+
+    // ===== ABILITY POLYMORPHISM =====
+    println!("\n--- Ability Polymorphism ---")
+
+    // Similar to effect polymorphism but for abilities (capabilities)
+    ability Alloc {
+        fn allocate(size: usize) -> *mut u8;
+        fn deallocate(ptr: *mut u8, size: usize);
+    }
+
+    handler SystemAlloc for Alloc {
+        fn allocate(size: usize) -> *mut u8 {
+            unsafe { std::alloc::alloc(std::alloc::Layout::from_size_align_unchecked(size, 8)) }
+        }
+        fn deallocate(ptr: *mut u8, size: usize) {
+            unsafe { std::alloc::dealloc(ptr, std::alloc::Layout::from_size_align_unchecked(size, 8)) }
+        }
+    }
+
+    fn allocate_vector<T>(len: usize) -> Vec<T> with Alloc {
+        // Uses Alloc ability
+        Vec::with_capacity(len)
+    }
+
+    println!("  Ability polymorphism shown")
+
+    // ===== EFFECT SAFETY =====
+    println!("\n--- Effect Safety ---")
+
+    // Effects are tracked in type system
+    // - No unhandled effects escape
+    // - Effects are composable
+    // - Handlers can be swapped
+    // - Pure functions have no effects
+
+    fn pure_function(x: i32) -> i32 {
+        x + 1  // No effects
+    }
+
+    // Pure functions can be called anywhere
+    let result = pure_function(41)
+    println!("  Pure function: {}", result)
+
+    println!("\n✅ Effect System Basics example completed!")
+}
+
+// Simulated effect system syntax
+mod effect {
+    pub macro effect($($tt:tt)*) { }
+    pub macro handler($($tt:tt)*) { }
+    pub macro with($($tt:tt)*) { }
+}
